@@ -7,7 +7,7 @@ Windows-specific implementation of the L{twisted.internet.stdio} interface.
 import win32api
 import os, msvcrt
 
-from zope.interface import implements
+from zope.interface import implementer
 
 from twisted.internet.interfaces import IHalfCloseableProtocol, ITransport, IAddress
 from twisted.internet.interfaces import IConsumer, IPushProducer
@@ -17,13 +17,13 @@ from twisted.python.failure import Failure
 
 
 class Win32PipeAddress(object):
-    implements(IAddress)
+    implementer(IAddress)
 
 
 
 class StandardIO(_pollingfile._PollingTimer):
 
-    implements(ITransport,
+    implementer(ITransport,
                IConsumer,
                IPushProducer)
 
