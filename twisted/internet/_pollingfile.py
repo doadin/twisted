@@ -7,9 +7,10 @@ Implements a simple polling interface for file descriptors that don't work with
 select() - this is pretty much only useful on Windows.
 """
 
-from zope.interface import implements
+from zope.interface import implementer
 
 from twisted.internet.interfaces import IConsumer, IPushProducer
+from twisted.python.compat import unicode
 
 
 MIN_TIMEOUT = 0.000000001
@@ -105,7 +106,7 @@ import pywintypes
 
 class _PollableReadPipe(_PollableResource):
 
-    implements(IPushProducer)
+    implementer(IPushProducer)
 
     def __init__(self, pipe, receivedCallback, lostCallback):
         # security attributes for pipes
@@ -161,7 +162,7 @@ FULL_BUFFER_SIZE = 64 * 1024
 
 class _PollableWritePipe(_PollableResource):
 
-    implements(IConsumer)
+    implementer(IConsumer)
 
     def __init__(self, writePipe, lostCallback):
         self.disconnecting = False
