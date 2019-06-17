@@ -65,3 +65,19 @@ class EnsureNotImportedTests(TestCase):
         )
         self.assertEqual(modules, {"m2": module})
         self.assertEqual(e.args, ("A message.",))
+
+
+class GlibReactorBaseTests(TestCase):
+    def test_simulate(self):
+        """ """
+        try:
+            from twisted.internet import gireactor as _gireactor
+        except ImportError:
+            gireactor = None
+        else:
+            gireactor = _gireactor
+
+        if gireactor is None:
+            self.skipTest("gi reactor not available")
+
+        gireactor.install().simulate()
