@@ -253,12 +253,11 @@ class FileHandle(_ConsumerMixin, _LogOwner):
     def writeToHandle(self, buff, evt):
         raise NotImplementedError()  # TODO: this should default to WriteFile
 
-    def write(self, data):
+    def write(self, data: ReadableBuffer) -> None:
         """Reliably write some data.
 
         The data is buffered until his file descriptor is ready for writing.
         """
-        _dataMustBeBytes(data)
         if not self.connected or self._writeDisconnected:
             return
         if data:
@@ -270,9 +269,7 @@ class FileHandle(_ConsumerMixin, _LogOwner):
                     self.producer.pauseProducing()
             self.startWriting()
 
-    def writeSequence(self, iovec):
-        for i in iovec:
-            _dataMustBeBytes(i)
+    def writeSequence(self, iovec: Iterable[ReadableBuffer]) -> None:
         if not self.connected or not iovec or self._writeDisconnected:
             return
         self._tempDataBuffer.extend(iovec)
