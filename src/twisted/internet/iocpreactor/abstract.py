@@ -27,6 +27,7 @@ class FileHandle(_ConsumerMixin, _LogOwner):
     File handle that can read and write asynchronously
     """
 
+    producer: Optional[interfaces.IPushProducer]
     # read stuff
     maxReadBuffers = 16
     readBufferSize = 4096
