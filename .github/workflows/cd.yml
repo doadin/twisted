@@ -1,0 +1,52 @@
+name: CD
+
+on:
+  push:
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  Build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64]
+        python: [3.9]
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python}}
+          architecture: ${{ matrix.arch }}
+
+      - name: Build Wheel
+        run: |
+          pip install incremental wheel
+          python setup.py bdist_wheel
+
+      - name: Find Wheel
+        run: |
+          $env:GITHUB_WORKSPACE
+          echo "..."
+          Get-Childitem –Path $env:GITHUB_WORKSPACE\ -Include *.whl -File -Recurse -ErrorAction SilentlyContinue | select -expand FullName
+          echo "..."
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: twisted-py${{matrix.python}}-wheel
+          path: dist/*.whl
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: latest
+          tag_name: latest
+          body: gvsbuild-${{ steps.date.outputs.date }}
+          files: "dist/*.whl"
