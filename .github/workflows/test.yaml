@@ -156,6 +156,16 @@ jobs:
             # select a reactor.
             trial-args: '--reactor=select'
 
+          # Windows, minimum Python version with gi reactor.
+          - python-version: '3.8'
+            runs-on: 'windows-2022'
+            tox-env: 'alldeps-withcov-windows'
+            job-name: 'win-default-tests-select'
+            # Distributed trial is not yet suported on Windows so we overwrite
+            # the default trial-args to remove concurrent runs and to
+            # select a reactor.
+            trial-args: '--reactor=gi'
+
           # Windows, newest Python supported version with iocp reactor.
           - python-version: '3.11'
             runs-on: 'windows-2022'
