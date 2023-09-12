@@ -271,7 +271,9 @@ jobs:
           $env:Path = 'C:\GTK\release\Bin;' + $env:Path
 
     - name: Test
+      shell: pwsh
       run: |
+        $env:Path = 'C:\GTK\release\Bin;' + $env:Path
         ${{ matrix.tox-wrapper }} tox ${{ matrix.trial-target }}
 
     # If one of the above steps fails, fire up tmate for remote debugging.
