@@ -50,4 +50,8 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: twisted-py${{ matrix.python }}-${{ matrix.arch }}
-          path: dist/*.whl
+          path: |
+            dist/*.whl
+            *.whl
+            /*/*.whl
+            /*/*/*.whl
