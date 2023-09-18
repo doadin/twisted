@@ -1,0 +1,57 @@
+# Try to get a short workflow name and a job name that start with Python
+# version to make it easier to check the status inside GitHub UI.
+#
+# When using external actions check that the external repos are permitted via
+# the GitHub configuration at https://github.com/twisted/twisted/settings/actions
+#
+name: WinWheel
+
+on:
+  push:
+
+jobs:
+  windows_package:
+    runs-on: windows-2019
+    strategy:
+      matrix:
+        arch: [x64, x86]
+        python: ["3.10"]
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # Checkout Twisted source to subdir to enable packaging any tag/commit
+      - name: Checkout Twisted source
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.ref }}
+          fetch-depth: 0
+          path: twisted_src
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python}}
+          architecture: ${{ matrix.arch }}
+          cache: pip
+
+      - name: Prepare pip
+        run: python -m pip install wheel
+
+      - name: Install Build Twisted Wheel
+        working-directory: twisted_src
+        run: |
+          python -m pip install --upgrade pip tox~=3.0 pep517
+          tox -e release-prepare
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: twisted-py${{ matrix.python }}-${{ matrix.arch }}
+          path: |
+            twisted_src/dist/*.whl
+            twisted_src/*/*.whl
+            twisted_src/*/*/*.whl
+            D:/a/twisted/twisted/twisted_src/dist/*.whl
