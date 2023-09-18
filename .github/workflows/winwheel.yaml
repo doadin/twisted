@@ -44,7 +44,7 @@ jobs:
       - name: Install Build Twisted Wheel
         working-directory: twisted_src
         run: |
-          python setup.py sdist bdist_wheel
+          python -m build
 
       - uses: actions/upload-artifact@v2
         with:
