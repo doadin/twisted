@@ -44,9 +44,11 @@ jobs:
       - name: Install Build Twisted Wheel
         working-directory: twisted_src
         run: |
-          python -m build
+          python -m pip install --upgrade pip tox~=3.0 pep517
+          rm -rf dist/*
+          tox -e release-prepare
 
       - uses: actions/upload-artifact@v2
         with:
           name: twisted-py${{ matrix.python }}-${{ matrix.arch }}
-          path: build/*.whl
+          path: dist/*.whl
