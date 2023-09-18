@@ -51,6 +51,7 @@ jobs:
         with:
           name: twisted-py${{ matrix.python }}-${{ matrix.arch }}
           path: |
-            dist/*.whl
-            /*/*.whl
-            /*/*/*.whl
+            twisted_src/dist/*.whl
+            twisted_src/*/*.whl
+            twisted_src/*/*/*.whl
+            D:/a/twisted/twisted/twisted_src/dist/*.whl
