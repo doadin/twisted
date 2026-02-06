@@ -59,9 +59,9 @@ jobs:
           echo "LIB=C:\\gtk\\lib;$LIB" >> $GITHUB_ENV
           echo "INCLUDE=C:\\gtk\\include;$INCLUDE" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=C:\\gtk\\lib\\pkgconfig" >> $GITHUB_ENV
-          echo "PIP_FIND_LINKS=C:\\gtk\\wheels" >> $GITHUB_ENV
+          echo "UV_FIND_LINKS=C:\\gtk\\wheels" >> $GITHUB_ENV
           printf 'pycairo==1.28.0\npygobject==3.54.0\n' > C:/gtk/constraints.txt
-          echo "PIP_CONSTRAINT=C:\\gtk\\constraints.txt" >> $GITHUB_ENV
+          echo "UV_CONSTRAINT=C:\\gtk\\constraints.txt" >> $GITHUB_ENV
 
       - name: Install Twisted
         run: |
