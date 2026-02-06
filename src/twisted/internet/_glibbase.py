@@ -224,7 +224,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
         return self._glib.io_add_watch(
             fileno,
-            self._glib.PRIORITY_DEFAULT_IDLE,
+            self._glib.PRIORITY_DEFAULT,
             condition,
             wrapper,
         )
@@ -233,18 +233,20 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Called by event loop when an I/O event occurs.
         """
-        import sys
-        import time
-
-        print(
-            f"[GI-DEBUG] _ioEventCallback t={time.monotonic():.3f}: source={source!r}, "
-            f"condition={condition!r}, "
-            f"IN={bool(condition & self._POLL_IN)}, "
-            f"OUT={bool(condition & self._POLL_OUT)}, "
-            f"DISC={bool(condition & self._POLL_DISCONNECTED)}",
-            file=sys.stderr,
-            flush=True,
-        )
+        if platform.isWindows():
+            # On Windows, we always register for IN|OUT to avoid removing and
+            # re-adding GLib sources (which triggers a bug in GLib's
+            # WSAEventSelect-based IOChannel implementation where events stop
+            # being delivered).  Filter the condition here to only include
+            # events the source is actually interested in.
+            filtered = condition & self._POLL_DISCONNECTED
+            if source in self._reads and (condition & self._POLL_IN):
+                filtered |= self._POLL_IN
+            if source in self._writes and (condition & self._POLL_OUT):
+                filtered |= self._POLL_OUT
+            if not filtered:
+                return True
+            condition = filtered
         log.callWithLogger(source, self._doReadOrWrite, source, source, condition)
         return True  # True = don't auto-remove the source
 
@@ -255,24 +257,26 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         delete the previous registration and re-register it for both reading
         and writing.
         """
-        import sys
-
         if source in primary:
             return
-        flags = primaryFlag
-        if source in other:
-            self._source_remove(self._sources[source])
-            flags |= otherFlag
-        self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
+        if platform.isWindows():
+            # On Windows, always register for IN|OUT to avoid removing and
+            # re-creating GLib sources.  GLib's Windows IOChannel
+            # implementation uses WSAEventSelect which breaks when sources are
+            # removed and re-added for the same socket during a callback.
+            # Event filtering is done in _ioEventCallback instead.
+            if source not in other:
+                flags = self.INFLAGS | self.OUTFLAGS
+                self._sources[source] = self.input_add(
+                    source, flags, self._ioEventCallback
+                )
+        else:
+            flags = primaryFlag
+            if source in other:
+                self._source_remove(self._sources[source])
+                flags |= otherFlag
+            self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         primary.add(source)
-        inReads = source in self._reads
-        inWrites = source in self._writes
-        print(
-            f"[GI-DEBUG] _add: source={source!r}, "
-            f"flags={flags!r}, inReads={inReads}, inWrites={inWrites}",
-            file=sys.stderr,
-            flush=True,
-        )
 
     def addReader(self, reader):
         """
@@ -312,12 +316,22 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         if source not in primary:
             return
-        self._source_remove(self._sources[source])
-        primary.remove(source)
-        if source in other:
-            self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
+        if platform.isWindows():
+            # On Windows, only remove the GLib source when the fd is no longer
+            # monitored for either reading or writing.  The source stays
+            # registered for IN|OUT; filtering is done in _ioEventCallback.
+            primary.remove(source)
+            if source not in other:
+                self._source_remove(self._sources.pop(source))
         else:
-            self._sources.pop(source)
+            self._source_remove(self._sources[source])
+            primary.remove(source)
+            if source in other:
+                self._sources[source] = self.input_add(
+                    source, flags, self._ioEventCallback
+                )
+            else:
+                self._sources.pop(source)
 
     def removeReader(self, reader):
         """
