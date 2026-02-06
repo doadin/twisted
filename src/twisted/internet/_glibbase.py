@@ -307,15 +307,42 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
     def _glibWindowsPoll(self):
         """
-        Recurring timer that polls all registered readers/writers.
-        Works around GLib's giowin32.c losing track of socket events.
-        Returns True to keep the timer recurring.
+        Recurring timer that uses select() to find fds with pending
+        events, then dispatches only those.  Works around GLib's
+        giowin32.c losing track of socket events.
         """
-        for reader in list(self._reads):
-            if getattr(reader, "connected", True):
+        import select as _select
+
+        fd_to_reader = {}
+        fd_to_writer = {}
+        for r in list(self._reads):
+            try:
+                fd_to_reader[r.fileno()] = r
+            except Exception:
+                pass
+        for w in list(self._writes):
+            try:
+                fd_to_writer[w.fileno()] = w
+            except Exception:
+                pass
+
+        rfds = list(fd_to_reader.keys())
+        wfds = list(fd_to_writer.keys())
+        if not rfds and not wfds:
+            return True
+
+        try:
+            readable, writable, _ = _select.select(rfds, wfds, [], 0)
+        except Exception:
+            return True
+
+        for fd in readable:
+            reader = fd_to_reader.get(fd)
+            if reader and reader in self._reads:
                 self._doReadOrWrite(reader, reader, self._POLL_IN)
-        for writer in list(self._writes):
-            if getattr(writer, "connected", True):
+        for fd in writable:
+            writer = fd_to_writer.get(fd)
+            if writer and writer in self._writes:
                 self._doReadOrWrite(writer, writer, self._POLL_OUT)
         return True  # keep timer alive
 
