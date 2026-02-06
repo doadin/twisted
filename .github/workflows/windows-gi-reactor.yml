@@ -1,11 +1,16 @@
 # .github/workflows/windows-gi-reactor.yml
 #
 # CI to test the GI/GTK reactor fix on Windows.
-# Uses MSYS2 (pre-installed on windows-latest) for GTK3 + PyGObject.
+# Uses native Python + gvsbuild for GTK3/PyGObject (not MSYS2, which
+# reports os.name='posix' and skips all Windows code paths).
+#
+# Three-stage approach:
+#   1. Known good (Twisted 22.10.0) — validate test harness works with --reactor=gi
+#   2. Current trunk (broken) — confirm the timeout/crash reproduces
+#   3. With our fix — verify it's actually fixed
 #
 # References:
 #   - https://github.com/twisted/twisted/issues/11987
-#   - https://github.com/msys2/setup-msys2
 
 name: Windows GI Reactor Tests
 
@@ -18,39 +23,62 @@ on:
 
 jobs:
   windows-gi-test:
-    runs-on: windows-latest
+    name: "${{ matrix.name }}"
+    runs-on: windows-2022
+    timeout-minutes: 10
+    continue-on-error: ${{ matrix.expect-failure || false }}
     strategy:
       fail-fast: false
       matrix:
-        # MSYS2 UCRT64 environment — the recommended modern toolchain
         include:
-          - msystem: UCRT64
-            prefix: mingw-w64-ucrt-x86_64
+          - name: "Stage 1: Known good (Twisted 22.10.0)"
+            install-cmd: "pip install twisted==22.10.0"
+            run-tests: true
+            expect-failure: false
+
+          - name: "Stage 2: Current trunk (expect failure)"
+            install-cmd: "pip install twisted"
+            run-tests: false
+            expect-failure: true
+
+          - name: "Stage 3: With fix"
+            install-cmd: 'pip install -e ".[dev]"'
+            run-tests: true
+            expect-failure: false
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up MSYS2 with GTK3 and PyGObject
-        uses: msys2/setup-msys2@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          msystem: ${{ matrix.msystem }}
-          update: true
-          install: >-
-            ${{ matrix.prefix }}-python
-            ${{ matrix.prefix }}-python-gobject
-            ${{ matrix.prefix }}-python-pip
-            ${{ matrix.prefix }}-gtk3
-            ${{ matrix.prefix }}-gcc
-            ${{ matrix.prefix }}-python-zope.interface
-            ${{ matrix.prefix }}-python-markupsafe
+          python-version: '3.13'
+
+      - name: Install GTK via gvsbuild
+        shell: bash
+        run: |
+          gh release download 2025.9.0 --repo wingtk/gvsbuild --pattern 'GTK3*.zip' -O gtk.zip
+          7z x gtk.zip -oC:\\gtk
+          echo "C:\\gtk\\bin" >> $GITHUB_PATH
+          echo "C:\\gtk\\lib" >> $GITHUB_PATH
+          echo "LIB=C:\\gtk\\lib;$LIB" >> $GITHUB_ENV
+          echo "INCLUDE=C:\\gtk\\include;$INCLUDE" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=C:\\gtk\\lib\\pkgconfig" >> $GITHUB_ENV
+          echo "PIP_FIND_LINKS=C:\\gtk\\wheels" >> $GITHUB_ENV
+          printf 'pycairo==1.28.0\npygobject==3.54.0\n' > C:/gtk/constraints.txt
+          echo "PIP_CONSTRAINT=C:\\gtk\\constraints.txt" >> $GITHUB_ENV
+
+      - name: Install PyGObject and PyCairo
+        run: |
+          pip install pycairo pygobject
 
       - name: Verify GTK3 and gi are available
-        shell: msys2 {0}
         run: |
           python -c "
-          import sys
+          import sys, os
           print(f'Python {sys.version}')
-          print(f'Platform: {sys.platform}')
+          print(f'sys.platform: {sys.platform}')
+          print(f'os.name: {os.name}')
           import gi
           print(f'gi version: {gi.__version__}')
           gi.require_version('GLib', '2.0')
@@ -58,52 +86,60 @@ jobs:
           print('GLib available')
           "
 
-      - name: Install Twisted from source
-        shell: msys2 {0}
+      - name: Install Twisted
         run: |
-          pip install -e ".[dev]"
+          ${{ matrix.install-cmd }}
 
-      # Quick smoke test — validates the core fix works
-      - name: Smoke test - import, install, run, stop
-        shell: msys2 {0}
+      - name: Smoke test - import and install
+        timeout-minutes: 2
         run: |
           python -c "
-          import sys
-          print(f'Python {sys.version}')
-          print(f'Platform: {sys.platform}')
-
-          # Test 1: Import
-          from twisted.internet import gireactor
-          print('PASS: gireactor imported')
-
-          # Test 2: Install
-          reactor = gireactor.install()
-          print(f'PASS: reactor installed: {type(reactor).__name__}')
-
-          # Test 3: Waker is functional
-          print(f'PASS: waker type: {type(reactor.waker).__name__}')
-          print(f'PASS: waker fileno: {reactor.waker.fileno()}')
-
-          # Test 4: Run/stop cycle
-          results = []
-          def cb():
-              results.append('called')
-              reactor.stop()
-          reactor.callWhenRunning(cb)
-          reactor.run(installSignalHandlers=False)
-          assert results == ['called'], f'Expected [called], got {results}'
-          print('PASS: run/stop cycle works')
-
-          print('ALL SMOKE TESTS PASSED')
+          try:
+              from twisted.internet import gireactor
+              reactor = gireactor.install()
+              print(f'Reactor installed: {type(reactor).__name__}')
+          except NameError as e:
+              print(f'EXPECTED FAILURE (Layer 1): {e}')
+              raise SystemExit(1)
+          except Exception as e:
+              print(f'UNEXPECTED ERROR: {type(e).__name__}: {e}')
+              raise SystemExit(1)
           "
 
-      # Full GI reactor test suite
-      - name: Run test_gireactor
-        shell: msys2 {0}
+      - name: Smoke test - callLater timing
+        if: success()
+        timeout-minutes: 2
         run: |
-          python -m twisted.trial twisted.internet.test.test_gireactor
+          python -c "
+          import time
+          from twisted.internet import gireactor
+          reactor = gireactor.install()
 
-      - name: Run test_glibbase
-        shell: msys2 {0}
+          start = time.time()
+          results = []
+
+          def delayed():
+              elapsed = time.time() - start
+              results.append(elapsed)
+              print(f'callLater fired after {elapsed:.2f}s')
+              reactor.stop()
+
+          reactor.callLater(0.5, delayed)
+          reactor.run(installSignalHandlers=False)
+
+          elapsed = results[0]
+          assert elapsed < 5.0, f'callLater took {elapsed:.2f}s — waker/timeout broken'
+          print(f'PASS: callLater completed in {elapsed:.2f}s')
+          "
+
+      - name: Run test_gireactor with --reactor=gi
+        if: success() && matrix.run-tests
+        timeout-minutes: 5
         run: |
-          python -m twisted.trial twisted.internet.test.test_glibbase
+          python -m twisted.trial --reactor=gi twisted.internet.test.test_gireactor
+
+      - name: Run test_glibbase with --reactor=gi
+        if: success() && matrix.run-tests
+        timeout-minutes: 5
+        run: |
+          python -m twisted.trial --reactor=gi twisted.internet.test.test_glibbase
