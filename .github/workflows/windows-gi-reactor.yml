@@ -34,11 +34,23 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Cache GTK (gvsbuild)
+        id: cache-gtk
+        uses: actions/cache@v4
+        with:
+          path: C:\gtk
+          key: gvsbuild-GTK3-2025.9.0
+
       - name: Install GTK via gvsbuild
+        if: steps.cache-gtk.outputs.cache-hit != 'true'
         shell: bash
         run: |
           gh release download 2025.9.0 --repo wingtk/gvsbuild --pattern 'GTK3*.zip' -O gtk.zip
           7z x gtk.zip -oC:\\gtk
+
+      - name: Set GTK environment
+        shell: bash
+        run: |
           echo "C:\\gtk\\bin" >> $GITHUB_PATH
           echo "C:\\gtk\\lib" >> $GITHUB_PATH
           echo "LIB=C:\\gtk\\lib;$LIB" >> $GITHUB_ENV
