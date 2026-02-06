@@ -281,6 +281,9 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Attempt to read from a reader or detect disconnection.  Workaround for
         GLib on Windows not delivering IN/HUP events reliably.
         """
+        _gdb(
+            f"_tryReadOrDisconnect fd={reader.fileno()} inReads={reader in self._reads}"
+        )
         if reader in self._reads:
             self._doReadOrWrite(reader, reader, self._POLL_IN)
 
@@ -297,6 +300,10 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Attempt to flush a writer's pending data.  This is a workaround for
         GLib on Windows not delivering OUT events reliably.
         """
+        _gdb(
+            f"_tryFlushWriter fd={writer.fileno()} inWrites={writer in self._writes}"
+            f" connected={getattr(writer, 'connected', '?')}"
+        )
         if writer in self._writes and getattr(writer, "connected", True):
             self._doReadOrWrite(writer, writer, self._POLL_OUT)
 
