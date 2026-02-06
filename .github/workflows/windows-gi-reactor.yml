@@ -147,3 +147,9 @@ jobs:
         timeout-minutes: 5
         run: |
           python -m twisted.trial --reactor=gi twisted.internet.test.test_glibbase
+
+      - name: Run test_newtls with --reactor=gi
+        if: success() && matrix.run-tests
+        timeout-minutes: 5
+        run: |
+          python -m twisted.trial --reactor=gi twisted.internet.test.test_newtls
