@@ -195,8 +195,10 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
         def _watchdog():
             _gdb("WATCHDOG thread started")
+            tick = 0
             while True:
                 time.sleep(1.0)
+                tick += 1
                 try:
                     read_fds = []
                     for source in list(reactor._reads):
@@ -207,26 +209,20 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
                         except Exception:
                             pass
 
-                    if not read_fds:
-                        continue
-
                     fds = [fd for fd, _ in read_fds]
-                    try:
-                        readable, _, _ = _select.select(fds, [], [], 0)
-                    except Exception as e:
-                        _gdb(f"WATCHDOG select error: {e}")
-                        continue
+                    readable = []
+                    if fds:
+                        try:
+                            readable, _, _ = _select.select(fds, [], [], 0)
+                        except Exception as e:
+                            _gdb(f"WATCHDOG select error: {e}")
 
-                    if readable:
-                        for fd in readable:
-                            src = next((s for f, s in read_fds if f == fd), None)
-                            in_sources = src in reactor._sources if src else "?"
-                            _gdb(
-                                f"WATCHDOG STALL fd={fd} source={src}"
-                                f" has pending data! inSources={in_sources}"
-                                f" reads={[s.fileno() for s in reactor._reads]}"
-                                f" sources={[s.fileno() for s in reactor._sources]}"
-                            )
+                    _gdb(
+                        f"WATCHDOG tick={tick}"
+                        f" reads={fds}"
+                        f" readable={readable}"
+                        f" sources={[s.fileno() for s in reactor._sources]}"
+                    )
                 except Exception as e:
                     _gdb(f"WATCHDOG error: {e}")
 
