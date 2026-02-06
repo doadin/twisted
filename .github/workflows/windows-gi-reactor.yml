@@ -4,11 +4,6 @@
 # Uses native Python + gvsbuild for GTK3/PyGObject (not MSYS2, which
 # reports os.name='posix' and skips all Windows code paths).
 #
-# Three-stage approach:
-#   1. Known good (Twisted 22.10.0) — validate test harness works with --reactor=gi
-#   2. Current trunk (broken) — confirm the timeout/crash reproduces
-#   3. With our fix — verify it's actually fixed
-#
 # References:
 #   - https://github.com/twisted/twisted/issues/11987
 
@@ -27,18 +22,9 @@ on:
 
 jobs:
   windows-gi-test:
-    name: "${{ matrix.name }}"
+    name: "Windows GI Reactor"
     runs-on: windows-2022
     timeout-minutes: 10
-    continue-on-error: ${{ matrix.expect-failure || false }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: "Stage 3: With fix"
-            install-cmd: 'pip install -e ".[dev,all-non-platform]"'
-            run-tests: true
-            expect-failure: false
 
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +68,7 @@ jobs:
 
       - name: Install Twisted
         run: |
-          ${{ matrix.install-cmd }}
+          pip install -e ".[dev,all-non-platform]"
 
       - name: Smoke test - import and install
         timeout-minutes: 2
@@ -101,7 +87,6 @@ jobs:
           "
 
       - name: Smoke test - callLater timing
-        if: success()
         timeout-minutes: 2
         run: |
           python -c "
@@ -127,19 +112,16 @@ jobs:
           "
 
       - name: Run test_gireactor with --reactor=gi
-        if: success() && matrix.run-tests
         timeout-minutes: 5
         run: |
           python -m twisted.trial --reactor=gi twisted.internet.test.test_gireactor
 
       - name: Run test_glibbase with --reactor=gi
-        if: success() && matrix.run-tests
         timeout-minutes: 5
         run: |
           python -m twisted.trial --reactor=gi twisted.internet.test.test_glibbase
 
       - name: Run test_newtls with --reactor=gi
-        if: success() && matrix.run-tests
         timeout-minutes: 5
         run: |
           python -m twisted.trial --reactor=gi twisted.internet.test.test_newtls
