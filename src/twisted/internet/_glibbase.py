@@ -175,8 +175,10 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         if platform.isWindows():
             # GLib's giowin32.c loses track of socket events after rapid
             # source_remove/io_add_watch cycles. Install a recurring timer
-            # to poll all registered readers/writers, ensuring events are
-            # never permanently lost.
+            # as a safety net.  It only dispatches events when GLib has
+            # not delivered any IO events for at least 1 second, to avoid
+            # interfering with normal event ordering.
+            self._lastIOEvent = time.monotonic()
             self._timeout_add(
                 200,  # ms
                 self._glibWindowsPoll,
@@ -250,6 +252,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Called by event loop when an I/O event occurs.
         """
+        self._lastIOEvent = time.monotonic()
         _gdb(
             f"_ioEventCallback fd={source.fileno()} condition={int(condition)}"
             f" inReads={source in self._reads} inWrites={source in self._writes}"
@@ -307,11 +310,18 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
     def _glibWindowsPoll(self):
         """
-        Recurring timer that uses select() to find fds with pending
-        events, then dispatches only those.  Works around GLib's
-        giowin32.c losing track of socket events.
+        Recurring safety-net timer for Windows.  Only dispatches events
+        when GLib has not delivered any IO callbacks for at least 1 second,
+        indicating its giowin32 event machinery has stalled.  Uses
+        select() to find which fds actually have pending data before
+        dispatching, to avoid unnecessary syscalls.
         """
         import select as _select
+
+        # Don't interfere while GLib is delivering events normally.
+        # Only kick in after 200ms of silence.
+        if time.monotonic() - self._lastIOEvent < 0.2:
+            return True
 
         fd_to_reader = {}
         fd_to_writer = {}
@@ -335,6 +345,12 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             readable, writable, _ = _select.select(rfds, wfds, [], 0)
         except Exception:
             return True
+
+        if readable or writable:
+            _gdb(
+                f"_glibWindowsPoll STALL RECOVERY readable={readable}"
+                f" writable={writable}"
+            )
 
         for fd in readable:
             reader = fd_to_reader.get(fd)
