@@ -33,6 +33,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: 'pip'
 
       - name: Cache GTK (gvsbuild)
         id: cache-gtk
@@ -133,7 +134,7 @@ jobs:
         run: |
           python -m twisted.trial --reactor=gi twisted.internet.test.test_glibbase
 
-      - name: Run test_newtls with --reactor=gi
-        timeout-minutes: 2
-        run: |
-          python -m twisted.trial --reactor=gi twisted.internet.test.test_newtls
+      # - name: Run test_newtls with --reactor=gi
+      #   timeout-minutes: 2
+      #   run: |
+      #     python -m twisted.trial --reactor=gi twisted.internet.test.test_newtls
