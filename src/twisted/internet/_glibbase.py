@@ -184,101 +184,23 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
     def _startWatchdogThread(self):
         """
-        Start a background thread that monitors for stalls. This runs
-        independently of the GLib main loop, so it can detect when the
-        loop itself is frozen.
+        Start a background thread that periodically wakes up the GLib
+        main context.  On Windows, GLib's giowin32.c can lose track of
+        socket events after rapid add/remove cycles (WSAEventSelect
+        state corruption).  Waking the context forces it to re-poll.
         """
-        import select as _select
-        import socket as _socket
         import threading
 
         reactor = self
 
         def _watchdog():
             _gdb("WATCHDOG thread started")
-            tick = 0
             while True:
-                time.sleep(1.0)
-                tick += 1
+                time.sleep(0.5)
                 try:
-                    read_fds = []
-                    for source in list(reactor._reads):
-                        try:
-                            fd = source.fileno()
-                            if fd >= 0:
-                                read_fds.append((fd, source))
-                        except Exception:
-                            pass
-
-                    fds = [fd for fd, _ in read_fds]
-                    readable = []
-                    writable_sel = []
-                    if fds:
-                        try:
-                            readable, writable_sel, _ = _select.select(fds, fds, [], 0)
-                        except Exception as e:
-                            _gdb(f"WATCHDOG select error: {e}")
-
-                    # Probe each fd for connection state and data
-                    probe = {}
-                    for fd in fds:
-                        try:
-                            dfd = _socket.dup(fd)
-                            s = _socket.socket(fileno=dfd)
-                            s.setblocking(False)
-                            try:
-                                peer = s.getpeername()
-                            except OSError as e:
-                                peer = f"e{e.errno}"
-                            try:
-                                err = s.getsockopt(_socket.SOL_SOCKET, _socket.SO_ERROR)
-                            except OSError:
-                                err = "?"
-                            try:
-                                data = s.recv(1, _socket.MSG_PEEK)
-                                has_data = len(data)
-                            except BlockingIOError:
-                                has_data = 0
-                            except OSError as e:
-                                has_data = f"e{e.errno}"
-                            probe[fd] = f"peer={peer} err={err} data={has_data}"
-                            s.close()
-                        except Exception as e:
-                            probe[fd] = f"fail:{e}"
-
-                    # Also check write fds
-                    write_fds = []
-                    for source in list(reactor._writes):
-                        try:
-                            fd = source.fileno()
-                            if fd >= 0:
-                                write_fds.append((fd, source))
-                        except Exception:
-                            pass
-                    wfds = [fd for fd, _ in write_fds]
-
-                    # Check pending write buffer sizes
-                    wbuf = {}
-                    for fd, source in write_fds:
-                        try:
-                            buf = getattr(source, "dataBuffer", b"")
-                            offset = getattr(source, "offset", 0)
-                            pending = len(buf) - offset if buf else 0
-                            wbuf[fd] = f"{type(source).__name__}" f" buf={pending}"
-                        except Exception as e:
-                            wbuf[fd] = f"?:{e}"
-
-                    _gdb(
-                        f"WATCHDOG tick={tick}"
-                        f" reads={fds}"
-                        f" readable={readable}"
-                        f" writable={writable_sel}"
-                        f" writes={wfds}"
-                        f" wbuf={wbuf}"
-                        f" sources={[s.fileno() for s in reactor._sources]}"
-                    )
-                    for fd, info in probe.items():
-                        _gdb(f"  fd={fd} {info}")
+                    if len(reactor._sources) > 1:
+                        reactor.context.wakeup()
+                        _gdb("WATCHDOG wakeup")
                 except Exception as e:
                     _gdb(f"WATCHDOG error: {e}")
 
