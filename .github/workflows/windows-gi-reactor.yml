@@ -12,6 +12,7 @@ name: Windows GI Reactor Tests
 env:
   GH_TOKEN: ${{ github.token }}
   UV_SYSTEM_PYTHON: 1
+  UV_LINK_MODE: copy
 
 on:
   push:
@@ -37,19 +38,18 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Cache GTK (gvsbuild)
-        id: cache-gtk
-        uses: actions/cache@v4
-        with:
-          path: C:\gtk
-          key: gvsbuild-GTK3-2025.9.0
+      # - name: Cache GTK (gvsbuild)
+      #   id: cache-gtk
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: C:\gtk
+      #     key: gvsbuild-GTK3-2025.9.0
 
       - name: Install GTK via gvsbuild
         if: steps.cache-gtk.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          gh release download 2025.9.0 --repo wingtk/gvsbuild --pattern 'GTK3*.zip' -O gtk.zip
-          7z x gtk.zip -oC:\\gtk
+          gh release download 2025.9.0 --repo wingtk/gvsbuild --pattern 'GTK3*.zip' -O - | 7z x -si -oC:\\gtk
 
       - name: Set GTK environment
         shell: bash
