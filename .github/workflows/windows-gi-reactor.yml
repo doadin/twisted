@@ -36,7 +36,7 @@ jobs:
       matrix:
         include:
           - name: "Stage 3: With fix"
-            install-cmd: 'pip install -e ".[dev]"'
+            install-cmd: 'pip install -e ".[dev,all-non-platform]"'
             run-tests: true
             expect-failure: false
 
