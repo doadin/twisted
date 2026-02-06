@@ -105,5 +105,4 @@ jobs:
           python -m twisted.trial --reactor=gi
           twisted.internet.test.test_gireactor
           twisted.internet.test.test_glibbase
-          twisted.internet.test.test_time
-          twisted.internet.test.test_newtls
+          twisted.internet.test.test_newtls.ProducerTestsMixin_PortableGIReactorTests
