@@ -180,46 +180,58 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         self._run = self.loop.run
 
         if _GLIB_DEBUG and platform.isWindows():
-            self._startSelectAudit()
+            self._startWatchdogThread()
 
-    def _startSelectAudit(self):
+    def _startWatchdogThread(self):
         """
-        Start a periodic audit that uses select() to check if any registered
-        read fds have pending data that GLib isn't delivering events for.
+        Start a background thread that monitors for stalls. This runs
+        independently of the GLib main loop, so it can detect when the
+        loop itself is frozen.
         """
         import select as _select
+        import threading
 
-        def _audit():
-            try:
-                read_fds = []
-                for source in list(self._reads):
-                    try:
-                        fd = source.fileno()
-                        if fd >= 0:
-                            read_fds.append((fd, source))
-                    except Exception:
-                        pass
-                if read_fds:
+        reactor = self
+
+        def _watchdog():
+            _gdb("WATCHDOG thread started")
+            while True:
+                time.sleep(1.0)
+                try:
+                    read_fds = []
+                    for source in list(reactor._reads):
+                        try:
+                            fd = source.fileno()
+                            if fd >= 0:
+                                read_fds.append((fd, source))
+                        except Exception:
+                            pass
+
+                    if not read_fds:
+                        continue
+
                     fds = [fd for fd, _ in read_fds]
                     try:
                         readable, _, _ = _select.select(fds, [], [], 0)
                     except Exception as e:
-                        _gdb(f"AUDIT select error: {e}")
-                        return True
+                        _gdb(f"WATCHDOG select error: {e}")
+                        continue
+
                     if readable:
                         for fd in readable:
                             src = next((s for f, s in read_fds if f == fd), None)
+                            in_sources = src in reactor._sources if src else "?"
                             _gdb(
-                                f"AUDIT STALL DETECTED fd={fd} source={src}"
-                                f" has data but GLib not delivering!"
-                                f" inSources={src in self._sources}"
+                                f"WATCHDOG STALL fd={fd} source={src}"
+                                f" has pending data! inSources={in_sources}"
+                                f" reads={[s.fileno() for s in reactor._reads]}"
+                                f" sources={[s.fileno() for s in reactor._sources]}"
                             )
-            except Exception as e:
-                _gdb(f"AUDIT error: {e}")
-            return True  # keep timer running
+                except Exception as e:
+                    _gdb(f"WATCHDOG error: {e}")
 
-        # Check every 500ms
-        self._timeout_add(500, _audit)
+        t = threading.Thread(target=_watchdog, daemon=True, name="glib-watchdog")
+        t.start()
 
     def _reallyStartRunning(self):
         """
@@ -310,8 +322,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         if source in primary:
             return
         flags = primaryFlag
-        reregistering = source in other
-        if reregistering:
+        if source in other:
             _gdb(
                 f"_add REREGISTER fd={source.fileno()} removing old source"
                 f" oldFlags={'IN' if source in self._reads else ''}{'OUT' if source in self._writes else ''}"
