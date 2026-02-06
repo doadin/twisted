@@ -11,8 +11,21 @@ import gireactor or gtk3reactor for GObject Introspection based applications,
 or glib2reactor or gtk2reactor for applications using legacy static bindings.
 """
 
+import os
 import sys
+import time
 from typing import Any, Callable, Dict, Set
+
+_GLIB_DEBUG = os.environ.get("TWISTED_GLIB_DEBUG", "0") == "1"
+
+
+def _gdb(*args):
+    """Debug print for GLib reactor internals."""
+    if _GLIB_DEBUG:
+        msg = " ".join(str(a) for a in args)
+        sys.stderr.write(f"[glibbase {time.monotonic():.3f}] {msg}\n")
+        sys.stderr.flush()
+
 
 from zope.interface import implementer
 
@@ -227,6 +240,10 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Called by event loop when an I/O event occurs.
         """
+        _gdb(
+            f"_ioEventCallback fd={source.fileno()} condition={int(condition)}"
+            f" inReads={source in self._reads} inWrites={source in self._writes}"
+        )
         log.callWithLogger(source, self._doReadOrWrite, source, source, condition)
         return True  # True = don't auto-remove the source
 
@@ -241,8 +258,13 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             return
         flags = primaryFlag
         if source in other:
+            _gdb(
+                f"_add REREGISTER fd={source.fileno()} newFlags={int(flags | otherFlag)}"
+            )
             self._source_remove(self._sources[source])
             flags |= otherFlag
+        else:
+            _gdb(f"_add NEW fd={source.fileno()} flags={int(flags)}")
         self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         primary.add(source)
 
