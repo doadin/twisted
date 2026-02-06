@@ -172,6 +172,16 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         self._source_remove = self._glib.source_remove
         self._timeout_add = self._glib.timeout_add
 
+        if platform.isWindows():
+            # GLib's giowin32.c loses track of socket events after rapid
+            # source_remove/io_add_watch cycles. Install a recurring timer
+            # to poll all registered readers/writers, ensuring events are
+            # never permanently lost.
+            self._timeout_add(
+                200,  # ms
+                self._glibWindowsPoll,
+            )
+
         self.context = self._glib.main_context_default()
         self._pending = self.context.pending
         self._iteration = self.context.iteration
@@ -294,6 +304,20 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         self._add(writer, self._writes, self._reads, self.OUTFLAGS, self.INFLAGS)
         if platform.isWindows():
             self.callLater(0, self._tryFlushWriter, writer)
+
+    def _glibWindowsPoll(self):
+        """
+        Recurring timer that polls all registered readers/writers.
+        Works around GLib's giowin32.c losing track of socket events.
+        Returns True to keep the timer recurring.
+        """
+        for reader in list(self._reads):
+            if getattr(reader, "connected", True):
+                self._doReadOrWrite(reader, reader, self._POLL_IN)
+        for writer in list(self._writes):
+            if getattr(writer, "connected", True):
+                self._doReadOrWrite(writer, writer, self._POLL_OUT)
+        return True  # keep timer alive
 
     def _tryFlushWriter(self, writer):
         """
