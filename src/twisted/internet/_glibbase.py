@@ -138,6 +138,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         self._reads: Set[IReadDescriptor] = set()
         self._writes: Set[IWriteDescriptor] = set()
         self._sources: Dict[FileDescriptor, int] = {}
+        self._channels: Dict[int, Any] = {}
         self._glib = glib_module
 
         self._POLL_DISCONNECTED = (
@@ -214,7 +215,14 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             # GLib can't watch socket fds directly on Windows; needs IOChannel.
             # PyGObject does this for socket objects, but we have an int fd.
             # https://github.com/GNOME/pygobject/blob/main/gi/overrides/GLib.py
-            fileno = self._glib.IOChannel.win32_new_socket(fileno)
+            #
+            # Cache IOChannel objects per fd to avoid creating duplicates when
+            # re-registering (e.g. transitioning read→read+write during TLS
+            # handshake).  Creating a new IOChannel for the same fd while the
+            # old one is still live causes GLib event delivery to break.
+            if fileno not in self._channels:
+                self._channels[fileno] = self._glib.IOChannel.win32_new_socket(fileno)
+            fileno = self._channels[fileno]
 
         return self._glib.io_add_watch(
             fileno,
@@ -290,6 +298,14 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         else:
             self._sources.pop(source)
+            if platform.isWindows():
+                # Clean up cached IOChannel now that this fd is fully unwatched.
+                try:
+                    fd = source.fileno()
+                except BaseException:
+                    pass
+                else:
+                    self._channels.pop(fd, None)
 
     def removeReader(self, reader):
         """
