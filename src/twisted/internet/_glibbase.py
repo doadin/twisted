@@ -275,8 +275,8 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             # socket I/O we need binary (no encoding) mode, otherwise GLib may
             # fail to deliver events when it encounters non-UTF-8 bytes (e.g.
             # during TLS handshakes).
-            fileno.set_encoding(None)
-            fileno.set_buffered(False)
+            # fileno.set_encoding(None)
+            # fileno.set_buffered(False)
 
         _gdb(f"input_add fd={fd} condition={condition} source={source}")
 
@@ -312,7 +312,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         if source in other:
             _gdb(
                 f"_add REREGISTER fd={source.fileno()} removing old source"
-                f" oldFlags={'IN' if source in self._reads else ''}{'OUT' if source in self._writes else ''}"
+                f' oldFlags={"IN" if source in self._reads else ""}{"OUT" if source in self._writes else ""}'
                 f" newFlags={flags}"
             )
             self._source_remove(self._sources[source])
@@ -376,7 +376,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         reregistering = source in other
         _gdb(
             f"_remove fd={source.fileno()} reregistering={reregistering}"
-            f" remainingFlags={flags if reregistering else 'NONE'}"
+            f' remainingFlags={flags if reregistering else "NONE"}'
         )
         self._source_remove(self._sources[source])
         primary.remove(source)
