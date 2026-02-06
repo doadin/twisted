@@ -212,9 +212,10 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
                     fds = [fd for fd, _ in read_fds]
                     readable = []
+                    writable_sel = []
                     if fds:
                         try:
-                            readable, _, _ = _select.select(fds, [], [], 0)
+                            readable, writable_sel, _ = _select.select(fds, fds, [], 0)
                         except Exception as e:
                             _gdb(f"WATCHDOG select error: {e}")
 
@@ -260,15 +261,18 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
                     wbuf = {}
                     for fd, source in write_fds:
                         try:
-                            buf = getattr(source, "dataBuffer", None)
-                            wbuf[fd] = len(buf) if buf else 0
-                        except Exception:
-                            wbuf[fd] = "?"
+                            buf = getattr(source, "dataBuffer", b"")
+                            offset = getattr(source, "offset", 0)
+                            pending = len(buf) - offset if buf else 0
+                            wbuf[fd] = f"{type(source).__name__}" f" buf={pending}"
+                        except Exception as e:
+                            wbuf[fd] = f"?:{e}"
 
                     _gdb(
                         f"WATCHDOG tick={tick}"
                         f" reads={fds}"
                         f" readable={readable}"
+                        f" writable={writable_sel}"
                         f" writes={wfds}"
                         f" wbuf={wbuf}"
                         f" sources={[s.fileno() for s in reactor._sources]}"
