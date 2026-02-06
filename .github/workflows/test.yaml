@@ -300,7 +300,10 @@ jobs:
         echo "INCLUDE=C:\gtk\include;$INCLUDE" >> $GITHUB_ENV
         echo "PKG_CONFIG_PATH=C:\gtk\lib\pkgconfig" >> $GITHUB_ENV
         # Make wheels available to tox's pip via PIP_FIND_LINKS
-        echo "PIP_FIND_LINKS=C:\gtk\wheels" >> $GITHUB_ENV
+        # Pin versions to match the gvsbuild wheels so pip doesn't pull newer ones from PyPI
+        echo "PIP_FIND_LINKS=C:\\gtk\\wheels" >> $GITHUB_ENV
+        printf 'pycairo==1.28.0\npygobject==3.54.0\n' > C:/gtk/constraints.txt
+        echo "PIP_CONSTRAINT=C:\\gtk\\constraints.txt" >> $GITHUB_ENV
 
     - name: Test
       run: |
