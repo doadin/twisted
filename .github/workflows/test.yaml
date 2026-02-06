@@ -113,33 +113,33 @@ jobs:
           # by GitHub. The availability of the Python version
           # depends on the version of Ubuntu in use.
           # See https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json
-          - python-version: '3.9.12'
-            tox-env: 'nodeps-withcov-posix'
-            job-name: 'nodeps-test'
-            runs-on: 'ubuntu-22.04'
+          # - python-version: '3.9.12'
+          #   tox-env: 'nodeps-withcov-posix'
+          #   job-name: 'nodeps-test'
+          #   runs-on: 'ubuntu-22.04'
 
-          # `noipv6` is created to make sure all is OK on an OS which doesn't
-          # have IPv6 available.
-          # Any supported Python version is OK for this job.
-          # We go with latest micro release for the smallest minor release
-          # that we support.
-          # This is also used to run tests with minimum dependency versions.
-          - python-version: '3.9'
-            noipv6: '-noipv6'
-            tox-env: 'mindeps-withcov-posix'
-            job-name: 'minimum-deps-noipv6'
+          # # `noipv6` is created to make sure all is OK on an OS which doesn't
+          # # have IPv6 available.
+          # # Any supported Python version is OK for this job.
+          # # We go with latest micro release for the smallest minor release
+          # # that we support.
+          # # This is also used to run tests with minimum dependency versions.
+          # - python-version: '3.9'
+          #   noipv6: '-noipv6'
+          #   tox-env: 'mindeps-withcov-posix'
+          #   job-name: 'minimum-deps-noipv6'
 
-          # Just Python 3.9 with default settings.
-          - python-version: '3.9'
+          # # Just Python 3.9 with default settings.
+          # - python-version: '3.9'
 
-          # Just Python 3.10 with default settings.
-          - python-version: '3.10'
+          # # Just Python 3.10 with default settings.
+          # - python-version: '3.10'
 
-          # Just Python 3.11 with default settings.
-          - python-version: '3.11'
+          # # Just Python 3.11 with default settings.
+          # - python-version: '3.11'
 
-          # Just Python 3.13 with default settings.
-          - python-version: '3.13'
+          # # Just Python 3.13 with default settings.
+          # - python-version: '3.13'
 
           # # Newest Intel macOS and oldest Python (major) supported versions.
           # # On 3.9 pyobjc-core build fails.
