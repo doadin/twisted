@@ -304,6 +304,8 @@ jobs:
         echo "PIP_FIND_LINKS=C:\\gtk\\wheels" >> $GITHUB_ENV
         printf 'pycairo==1.28.0\npygobject==3.54.0\n' > C:/gtk/constraints.txt
         echo "PIP_CONSTRAINT=C:\\gtk\\constraints.txt" >> $GITHUB_ENV
+      env:
+        GH_TOKEN: ${{ github.token }}
 
     - name: Test
       run: |

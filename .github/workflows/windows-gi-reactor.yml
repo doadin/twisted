@@ -41,7 +41,10 @@ jobs:
       - name: Install GTK via gvsbuild
         shell: bash
         run: |
-          gh release download 2025.9.0 --repo wingtk/gvsbuild --pattern 'GTK3*.zip' -O gtk.zip
+          gh release download 2025.9.0 \
+            --repo wingtk/gvsbuild \
+            --pattern 'GTK3*.zip' \
+            --output gtk.zip
           7z x gtk.zip -oC:\\gtk
 
       - name: Set GTK environment
