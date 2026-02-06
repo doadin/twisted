@@ -121,5 +121,5 @@ jobs:
         run: >
           python -m twisted.trial --reactor=gi -e
           --testmodule GIReactor
-          twisted.internet.test.test_newtls
           twisted.internet.test.test_tcp
+          twisted.internet.test.test_newtls
