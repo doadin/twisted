@@ -11,21 +11,8 @@ import gireactor or gtk3reactor for GObject Introspection based applications,
 or glib2reactor or gtk2reactor for applications using legacy static bindings.
 """
 
-import os
 import sys
-import time
 from typing import Any, Callable, Dict, Set
-
-_GLIB_DEBUG = os.environ.get("TWISTED_GLIB_DEBUG", "0") == "1"
-
-
-def _gdb(*args):
-    """Debug print for GLib reactor internals."""
-    if _GLIB_DEBUG:
-        msg = " ".join(str(a) for a in args)
-        sys.stderr.write(f"[glibbase {time.monotonic():.3f}] {msg}\n")
-        sys.stderr.flush()
-
 
 from zope.interface import implementer
 
@@ -179,47 +166,6 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         self._crash = _loopQuitter(self._glib.idle_add, self.loop.quit)
         self._run = self.loop.run
 
-        if _GLIB_DEBUG and platform.isWindows():
-            self._startWatchdogThread()
-
-    def _startWatchdogThread(self):
-        """
-        Start a background thread that monitors for stalls.
-        """
-        import threading
-
-        reactor = self
-
-        def _watchdog():
-            _gdb("WATCHDOG thread started")
-            tick = 0
-            while True:
-                time.sleep(1.0)
-                tick += 1
-                try:
-                    # Check write-pending sources for unsent data
-                    for source in list(reactor._writes):
-                        try:
-                            fd = source.fileno()
-                            tmp = getattr(source, "_tempDataBuffer", [])
-                            tmp_len = getattr(source, "_tempDataLen", 0)
-                            buf = getattr(source, "dataBuffer", b"")
-                            offset = getattr(source, "offset", 0)
-                            buf_pending = len(buf) - offset if buf else 0
-                            _gdb(
-                                f"WATCHDOG tick={tick} fd={fd}"
-                                f" tempBuf={tmp_len}({len(tmp)} chunks)"
-                                f" dataBuf={buf_pending}"
-                                f" type={type(source).__name__}"
-                            )
-                        except Exception as e:
-                            _gdb(f"WATCHDOG probe error: {e}")
-                except Exception as e:
-                    _gdb(f"WATCHDOG error: {e}")
-
-        t = threading.Thread(target=_watchdog, daemon=True, name="glib-watchdog")
-        t.start()
-
     def _reallyStartRunning(self):
         """
         Make sure the reactor's signal handlers are installed despite any
@@ -259,30 +205,24 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             def wrapper(ignored, condition):
                 return callback(source, condition)
 
-            fd = source.fileno()
+            fileno = source.fileno()
         else:
-            fd = source
+            fileno = source
             wrapper = callback
-
-        fileno = fd  # keep raw fd for logging
 
         if platform.isWindows():
             # GLib can't watch socket fds directly on Windows; needs IOChannel.
             # PyGObject does this for socket objects, but we have an int fd.
             # https://github.com/GNOME/pygobject/blob/main/gi/overrides/GLib.py
-            fileno = self._glib.IOChannel.win32_new_socket(fd)
+            fileno = self._glib.IOChannel.win32_new_socket(fileno)
             # IOChannels default to UTF-8 encoding and buffered mode.  For raw
             # socket I/O we need binary (no encoding) mode, otherwise GLib may
             # fail to deliver events when it encounters non-UTF-8 bytes (e.g.
             # during TLS handshakes).
-            # fileno.set_encoding(None)
-            # fileno.set_buffered(False)
-
-        _gdb(f"input_add fd={fd} condition={condition} source={source}")
 
         return self._glib.io_add_watch(
             fileno,
-            self._glib.PRIORITY_DEFAULT,
+            self._glib.PRIORITY_DEFAULT_IDLE,
             condition,
             wrapper,
         )
@@ -291,11 +231,6 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Called by event loop when an I/O event occurs.
         """
-        fd = source.fileno() if hasattr(source, "fileno") else source
-        _gdb(
-            f"_ioEventCallback fd={fd} condition={condition}"
-            f" inReads={source in self._reads} inWrites={source in self._writes}"
-        )
         log.callWithLogger(source, self._doReadOrWrite, source, source, condition)
         return True  # True = don't auto-remove the source
 
@@ -310,15 +245,8 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             return
         flags = primaryFlag
         if source in other:
-            _gdb(
-                f"_add REREGISTER fd={source.fileno()} removing old source"
-                f' oldFlags={"IN" if source in self._reads else ""}{"OUT" if source in self._writes else ""}'
-                f" newFlags={flags}"
-            )
             self._source_remove(self._sources[source])
             flags |= otherFlag
-        else:
-            _gdb(f"_add NEW fd={source.fileno()} flags={flags}")
         self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         primary.add(source)
 
@@ -373,14 +301,9 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         if source not in primary:
             return
-        reregistering = source in other
-        _gdb(
-            f"_remove fd={source.fileno()} reregistering={reregistering}"
-            f' remainingFlags={flags if reregistering else "NONE"}'
-        )
         self._source_remove(self._sources[source])
         primary.remove(source)
-        if reregistering:
+        if source in other:
             self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         else:
             self._sources.pop(source)

@@ -248,37 +248,15 @@ class TLSMemoryBIOProtocol(ProtocolWrapper):
         # The connection might already be aborted (eg. by a callback during
         # connection setup), so don't even bother trying to handshake in that
         # case.
-        import sys
-
         if self._aborted:
-            print(
-                "[TLS-DEBUG] _checkHandshakeStatus: aborted, skipping",
-                file=sys.stderr,
-                flush=True,
-            )
             return
         try:
             self._tlsConnection.do_handshake()
         except WantReadError:
-            print(
-                "[TLS-DEBUG] _checkHandshakeStatus: WantReadError, flushing send BIO",
-                file=sys.stderr,
-                flush=True,
-            )
             self._flushSendBIO()
-        except Error as e:
-            print(
-                f"[TLS-DEBUG] _checkHandshakeStatus: Error: {e!r}",
-                file=sys.stderr,
-                flush=True,
-            )
+        except Error:
             self._tlsShutdownFinished(Failure())
         else:
-            print(
-                "[TLS-DEBUG] _checkHandshakeStatus: handshake DONE!",
-                file=sys.stderr,
-                flush=True,
-            )
             self._handshakeDone = True
             if IHandshakeListener.providedBy(self.wrappedProtocol):
                 self.wrappedProtocol.handshakeCompleted()
@@ -288,23 +266,12 @@ class TLSMemoryBIOProtocol(ProtocolWrapper):
         Read any bytes out of the send BIO and write them to the underlying
         transport.
         """
-        import sys
-
         try:
             bytes = self._tlsConnection.bio_read(2**15)
         except WantReadError:
             # There may be nothing in the send BIO right now.
-            print(
-                "[TLS-DEBUG] _flushSendBIO: nothing to send (WantReadError)",
-                file=sys.stderr,
-                flush=True,
-            )
+            pass
         else:
-            print(
-                f"[TLS-DEBUG] _flushSendBIO: writing {len(bytes)} bytes to transport",
-                file=sys.stderr,
-                flush=True,
-            )
             self.transport.write(bytes)
 
     def _flushReceiveBIO(self):
@@ -355,14 +322,6 @@ class TLSMemoryBIOProtocol(ProtocolWrapper):
         to the application any application-level data which becomes available
         as a result of this.
         """
-        import sys
-
-        print(
-            f"[TLS-DEBUG] dataReceived: {len(bytes)} bytes, "
-            f"handshakeDone={self._handshakeDone}",
-            file=sys.stderr,
-            flush=True,
-        )
         # Let OpenSSL know some bytes were just received.
         self._tlsConnection.bio_write(bytes)
 
