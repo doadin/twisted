@@ -259,9 +259,13 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         self._add(writer, self._writes, self._reads, self.OUTFLAGS, self.INFLAGS)
         if platform.isWindows():
             # GLib on Windows (giowin32.c) can fail to deliver OUT events
-            # after rapid source_remove/io_add_watch cycles.  Schedule an
-            # immediate write attempt via the timer path which is reliable.
-            self.callLater(0, self._tryFlushWriter, writer)
+            # after rapid source_remove/io_add_watch cycles. If there's
+            # buffered data, try an immediate write instead of waiting for
+            # an event that may never arrive.
+            if getattr(writer, "_tempDataLen", 0) > 0 or len(
+                getattr(writer, "dataBuffer", b"")
+            ) > getattr(writer, "offset", 0):
+                self.callLater(0, self._tryFlushWriter, writer)
 
     def _tryFlushWriter(self, writer):
         """
