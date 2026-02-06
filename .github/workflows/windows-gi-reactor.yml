@@ -46,7 +46,6 @@ jobs:
       #     key: gvsbuild-GTK3-2025.9.0
 
       - name: Install GTK via gvsbuild
-        if: steps.cache-gtk.outputs.cache-hit != 'true'
         shell: bash
         run: |
           gh release download 2025.9.0 --repo wingtk/gvsbuild --pattern 'GTK3*.zip' -O - | 7z x -si -oC:\\gtk
