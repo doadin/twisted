@@ -35,16 +35,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: "Stage 1: Known good (Twisted 22.10.0)"
-            install-cmd: "pip install twisted==22.10.0"
-            run-tests: true
-            expect-failure: false
-
-          - name: "Stage 2: Current trunk (expect failure)"
-            install-cmd: "pip install twisted"
-            run-tests: false
-            expect-failure: true
-
           - name: "Stage 3: With fix"
             install-cmd: 'pip install -e ".[dev]"'
             run-tests: true
