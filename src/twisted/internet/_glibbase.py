@@ -258,7 +258,6 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         self._add(writer, self._writes, self._reads, self.OUTFLAGS, self.INFLAGS)
         if platform.isWindows():
-            return
             # GLib on Windows (giowin32.c) can fail to deliver OUT events
             # after rapid source_remove/io_add_watch cycles.  Schedule an
             # immediate write attempt via the timer path which is reliable.
