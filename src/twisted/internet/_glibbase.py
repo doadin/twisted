@@ -245,10 +245,32 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
                         except Exception as e:
                             probe[fd] = f"fail:{e}"
 
+                    # Also check write fds
+                    write_fds = []
+                    for source in list(reactor._writes):
+                        try:
+                            fd = source.fileno()
+                            if fd >= 0:
+                                write_fds.append((fd, source))
+                        except Exception:
+                            pass
+                    wfds = [fd for fd, _ in write_fds]
+
+                    # Check pending write buffer sizes
+                    wbuf = {}
+                    for fd, source in write_fds:
+                        try:
+                            buf = getattr(source, "dataBuffer", None)
+                            wbuf[fd] = len(buf) if buf else 0
+                        except Exception:
+                            wbuf[fd] = "?"
+
                     _gdb(
                         f"WATCHDOG tick={tick}"
                         f" reads={fds}"
                         f" readable={readable}"
+                        f" writes={wfds}"
+                        f" wbuf={wbuf}"
                         f" sources={[s.fileno() for s in reactor._sources]}"
                     )
                     for fd, info in probe.items():
