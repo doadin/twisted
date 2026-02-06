@@ -11,9 +11,9 @@ name: Windows GI Reactor Tests
 
 on:
   push:
-    branches: [ trunk, "11987-*" ]
+    branches: [trunk, "11987-*"]
   pull_request:
-    branches: [ trunk ]
+    branches: [trunk]
   workflow_dispatch:
 
 jobs:
@@ -36,15 +36,13 @@ jobs:
           msystem: ${{ matrix.msystem }}
           update: true
           install: >-
-            ${{ matrix.prefix }}-python3
-            ${{ matrix.prefix }}-python3-gobject
-            ${{ matrix.prefix }}-python3-pip
+            ${{ matrix.prefix }}-python
+            ${{ matrix.prefix }}-python-gobject
+            ${{ matrix.prefix }}-python-pip
             ${{ matrix.prefix }}-gtk3
-
-      - name: Install Twisted from source
-        shell: msys2 {0}
-        run: |
-          pip install -e ".[dev]"
+            ${{ matrix.prefix }}-gcc
+            ${{ matrix.prefix }}-python-zope.interface
+            ${{ matrix.prefix }}-python-markupsafe
 
       - name: Verify GTK3 and gi are available
         shell: msys2 {0}
@@ -59,6 +57,11 @@ jobs:
           from gi.repository import GLib
           print('GLib available')
           "
+
+      - name: Install Twisted from source
+        shell: msys2 {0}
+        run: |
+          pip install -e ".[dev]"
 
       # Quick smoke test — validates the core fix works
       - name: Smoke test - import, install, run, stop
