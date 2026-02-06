@@ -299,6 +299,9 @@ jobs:
         echo "LIB=C:\gtk\lib;$LIB" >> $GITHUB_ENV
         echo "INCLUDE=C:\gtk\include;$INCLUDE" >> $GITHUB_ENV
         echo "PKG_CONFIG_PATH=C:\gtk\lib\pkgconfig" >> $GITHUB_ENV
+        # Install PyGObject and PyCairo wheels
+        pip install --force-reinstall (Resolve-Path C:\gtk\wheels\PyGObject*.whl)
+        pip install --force-reinstall (Resolve-Path C:\gtk\wheels\pycairo*.whl)
 
     - name: Test
       run: |
