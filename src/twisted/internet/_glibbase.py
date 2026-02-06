@@ -227,6 +227,17 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Called by event loop when an I/O event occurs.
         """
+        import sys
+
+        print(
+            f"[GI-DEBUG] _ioEventCallback: source={source!r}, "
+            f"condition={condition!r}, "
+            f"IN={bool(condition & self._POLL_IN)}, "
+            f"OUT={bool(condition & self._POLL_OUT)}, "
+            f"DISC={bool(condition & self._POLL_DISCONNECTED)}",
+            file=sys.stderr,
+            flush=True,
+        )
         log.callWithLogger(source, self._doReadOrWrite, source, source, condition)
         return True  # True = don't auto-remove the source
 
@@ -237,6 +248,8 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         delete the previous registration and re-register it for both reading
         and writing.
         """
+        import sys
+
         if source in primary:
             return
         flags = primaryFlag
@@ -245,6 +258,14 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             flags |= otherFlag
         self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         primary.add(source)
+        inReads = source in self._reads
+        inWrites = source in self._writes
+        print(
+            f"[GI-DEBUG] _add: source={source!r}, "
+            f"flags={flags!r}, inReads={inReads}, inWrites={inWrites}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     def addReader(self, reader):
         """
