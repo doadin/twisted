@@ -11,7 +11,6 @@ import gireactor or gtk3reactor for GObject Introspection based applications,
 or glib2reactor or gtk2reactor for applications using legacy static bindings.
 """
 
-
 import sys
 from typing import Any, Callable, Dict, Set
 
@@ -22,7 +21,7 @@ from twisted.internet.abstract import FileDescriptor
 from twisted.internet.interfaces import IReactorFDSet, IReadDescriptor, IWriteDescriptor
 from twisted.python import log
 from twisted.python.monkey import MonkeyPatcher
-from twisted.python.runtime import platformType
+from twisted.python.runtime import platform
 from ._signals import _IWaker, _Waker
 
 
@@ -211,11 +210,10 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             fileno = source
             wrapper = callback
 
-        if platformType == "win32":
-            # On Windows, GLib cannot watch raw file descriptors for sockets.
-            # We must wrap the socket fd with GLib.IOChannel.win32_new_socket()
-            # so that GLib's I/O channel infrastructure handles it correctly.
-            # See: https://github.com/twisted/twisted/issues/11987
+        if platform.isWindows():
+            # GLib can't watch socket fds directly on Windows; needs IOChannel.
+            # PyGObject does this for socket objects, but we have an int fd.
+            # https://github.com/GNOME/pygobject/blob/main/gi/overrides/GLib.py
             fileno = self._glib.IOChannel.win32_new_socket(fileno)
 
         return self._glib.io_add_watch(
