@@ -451,64 +451,56 @@ class _PollLikeMixin:
         fd is available for read or write, do the work and raise errors if
         necessary.
         """
-        import sys as _sys
-
-        print(
-            f"[DORW-DEBUG] _doReadOrWrite: selectable={selectable!r}, "
-            f"fileno={selectable.fileno()}, event={event!r}",
-            file=_sys.stderr,
-            flush=True,
-        )
         why = None
         inRead = False
         if event & self._POLL_DISCONNECTED and not (event & self._POLL_IN):
             # Handle disconnection.  But only if we finished processing all
             # the pending input.
             if fd in self._reads:
+                # If we were reading from the descriptor then this is a
+                # clean shutdown.  We know there are no read events pending
+                # because we just checked above.  It also might be a
+                # half-close (which is why we have to keep track of inRead).
                 inRead = True
                 why = CONNECTION_DONE
             else:
+                # If we weren't reading, this is an error shutdown of some
+                # sort.
                 why = CONNECTION_LOST
-            print(
-                f"[DORW-DEBUG]   disconnect: why={why!r}", file=_sys.stderr, flush=True
-            )
         else:
             # Any non-disconnect event turns into a doRead or a doWrite.
             try:
+                # First check to see if the descriptor is still valid.  This
+                # gives fileno() a chance to raise an exception, too.
+                # Ideally, disconnection would always be indicated by the
+                # return value of doRead or doWrite (or an exception from
+                # one of those methods), but calling fileno here helps make
+                # buggy applications more transparent.
                 if selectable.fileno() == -1:
+                    # -1 is sort of a historical Python artifact.  Python
+                    # files and sockets used to change their file descriptor
+                    # to -1 when they closed.  For the time being, we'll
+                    # continue to support this anyway in case applications
+                    # replicated it, plus abstract.FileDescriptor.fileno
+                    # returns -1.  Eventually it'd be good to deprecate this
+                    # case.
                     why = _NO_FILEDESC
                 else:
                     if event & self._POLL_IN:
                         # Handle a read event.
                         why = selectable.doRead()
-                        print(
-                            f"[DORW-DEBUG]   doRead result: {why!r}",
-                            file=_sys.stderr,
-                            flush=True,
-                        )
                         inRead = True
                     if not why and event & self._POLL_OUT:
                         # Handle a write event, as long as doRead didn't
                         # disconnect us.
                         why = selectable.doWrite()
-                        print(
-                            f"[DORW-DEBUG]   doWrite result: {why!r}",
-                            file=_sys.stderr,
-                            flush=True,
-                        )
                         inRead = False
             except BaseException:
                 # Any exception from application code gets logged and will
                 # cause us to disconnect the selectable.
                 why = sys.exc_info()[1]
-                print(
-                    f"[DORW-DEBUG]   exception: {why!r}", file=_sys.stderr, flush=True
-                )
                 log.err()
         if why:
-            print(
-                f"[DORW-DEBUG]   disconnecting: {why!r}", file=_sys.stderr, flush=True
-            )
             self._disconnectSelectable(selectable, why, inRead)
 
 

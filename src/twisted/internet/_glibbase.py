@@ -233,20 +233,6 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Called by event loop when an I/O event occurs.
         """
-        if platform.isWindows():
-            # On Windows, we always register for IN|OUT to avoid removing and
-            # re-adding GLib sources (which triggers a bug in GLib's
-            # WSAEventSelect-based IOChannel implementation where events stop
-            # being delivered).  Filter the condition here to only include
-            # events the source is actually interested in.
-            filtered = condition & self._POLL_DISCONNECTED
-            if source in self._reads and (condition & self._POLL_IN):
-                filtered |= self._POLL_IN
-            if source in self._writes and (condition & self._POLL_OUT):
-                filtered |= self._POLL_OUT
-            if not filtered:
-                return True
-            condition = filtered
         log.callWithLogger(source, self._doReadOrWrite, source, source, condition)
         return True  # True = don't auto-remove the source
 
@@ -259,23 +245,11 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         if source in primary:
             return
-        if platform.isWindows():
-            # On Windows, always register for IN|OUT to avoid removing and
-            # re-creating GLib sources.  GLib's Windows IOChannel
-            # implementation uses WSAEventSelect which breaks when sources are
-            # removed and re-added for the same socket during a callback.
-            # Event filtering is done in _ioEventCallback instead.
-            if source not in other:
-                flags = self.INFLAGS | self.OUTFLAGS
-                self._sources[source] = self.input_add(
-                    source, flags, self._ioEventCallback
-                )
-        else:
-            flags = primaryFlag
-            if source in other:
-                self._source_remove(self._sources[source])
-                flags |= otherFlag
-            self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
+        flags = primaryFlag
+        if source in other:
+            self._source_remove(self._sources[source])
+            flags |= otherFlag
+        self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         primary.add(source)
 
     def addReader(self, reader):
@@ -316,22 +290,12 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         if source not in primary:
             return
-        if platform.isWindows():
-            # On Windows, only remove the GLib source when the fd is no longer
-            # monitored for either reading or writing.  The source stays
-            # registered for IN|OUT; filtering is done in _ioEventCallback.
-            primary.remove(source)
-            if source not in other:
-                self._source_remove(self._sources.pop(source))
+        self._source_remove(self._sources[source])
+        primary.remove(source)
+        if source in other:
+            self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         else:
-            self._source_remove(self._sources[source])
-            primary.remove(source)
-            if source in other:
-                self._sources[source] = self.input_add(
-                    source, flags, self._ioEventCallback
-                )
-            else:
-                self._sources.pop(source)
+            self._sources.pop(source)
 
     def removeReader(self, reader):
         """
@@ -415,15 +379,5 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Run timers, and then reschedule glib timeout for next scheduled event.
         """
-        import sys
-        import time
-
-        print(
-            f"[GI-DEBUG] _simulate t={time.monotonic():.3f}: "
-            f"readers={len(self._reads)}, writers={len(self._writes)}, "
-            f"sources={list(self._sources.keys())!r}",
-            file=sys.stderr,
-            flush=True,
-        )
         self.runUntilCurrent()
         self._reschedule()
