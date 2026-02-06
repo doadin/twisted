@@ -234,9 +234,10 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Called by event loop when an I/O event occurs.
         """
         import sys
+        import time
 
         print(
-            f"[GI-DEBUG] _ioEventCallback: source={source!r}, "
+            f"[GI-DEBUG] _ioEventCallback t={time.monotonic():.3f}: source={source!r}, "
             f"condition={condition!r}, "
             f"IN={bool(condition & self._POLL_IN)}, "
             f"OUT={bool(condition & self._POLL_OUT)}, "
@@ -400,5 +401,15 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Run timers, and then reschedule glib timeout for next scheduled event.
         """
+        import sys
+        import time
+
+        print(
+            f"[GI-DEBUG] _simulate t={time.monotonic():.3f}: "
+            f"readers={len(self._reads)}, writers={len(self._writes)}, "
+            f"sources={list(self._sources.keys())!r}",
+            file=sys.stderr,
+            flush=True,
+        )
         self.runUntilCurrent()
         self._reschedule()
