@@ -115,17 +115,11 @@ jobs:
           print(f'PASS: callLater completed in {elapsed:.2f}s')
           "
 
-      - name: Run test_gireactor with --reactor=gi
-        timeout-minutes: 5
+      - name: Run test for reactor gi
+        timeout-minutes: 3
         run: |
-          python -m twisted.trial --reactor=gi twisted.internet.test.test_gireactor
-
-      - name: Run test_glibbase with --reactor=gi
-        timeout-minutes: 5
-        run: |
-          python -m twisted.trial --reactor=gi twisted.internet.test.test_glibbase
-
-      - name: Run test_newtls with --reactor=gi
-        timeout-minutes: 2
-        run: |
-          python -m twisted.trial --reactor=gi twisted.internet.test.test_newtls
+          python -m twisted.trial --reactor=gi \
+            twisted.internet.test.test_gireactor
+            twisted.internet.test.test_glibbase
+            twisted.internet.test.test_time
+            twisted.internet.test.test_newtls
