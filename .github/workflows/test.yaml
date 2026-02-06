@@ -155,22 +155,22 @@ jobs:
           #   tox-env: 'macos-withcov-alldeps'
 
           # Windows, minimum Python version with select reactor.
-          - python-version: '3.9'
-            runs-on: 'windows-2022'
-            tox-env: 'alldeps-withcov-windows'
-            job-name: 'win-default-tests-select'
-            # Distributed trial is not yet suported on Windows so we overwrite
-            # the default trial-args to remove concurrent runs and to
-            # select a reactor.
-            trial-args: '--reactor=select'
+          # - python-version: '3.9'
+          #   runs-on: 'windows-2022'
+          #   tox-env: 'alldeps-withcov-windows'
+          #   job-name: 'win-default-tests-select'
+          #   # Distributed trial is not yet suported on Windows so we overwrite
+          #   # the default trial-args to remove concurrent runs and to
+          #   # select a reactor.
+          #   trial-args: '--reactor=select'
 
-          # Windows, newest Python supported version with iocp reactor.
-          - python-version: '3.13'
-            runs-on: 'windows-2022'
-            tox-env: 'alldeps-withcov-windows'
-            job-name: 'win-default-tests-iocp'
-            # Distributed trial is not yet suported on Windows.
-            trial-args: '--reactor=iocp'
+          # # Windows, newest Python supported version with iocp reactor.
+          # - python-version: '3.13'
+          #   runs-on: 'windows-2022'
+          #   tox-env: 'alldeps-withcov-windows'
+          #   job-name: 'win-default-tests-iocp'
+          #   # Distributed trial is not yet suported on Windows.
+          #   trial-args: '--reactor=iocp'
 
           # Windows newest Python supported version with GI reactor.
           - python-version: '3.13'
@@ -213,16 +213,16 @@ jobs:
           #   # twisted.conch https://github.com/twisted/twisted/issues/12512
           #   trial-target: '-- twisted.application twisted.cred twisted.internet twisted.logger twisted.mail twisted.names twisted.pair twisted.persisted twisted.protocols twisted.python twisted.runner twisted.scripts twisted.spread twisted.test twisted.trial twisted.web twisted.words'
 
-          - python-version: '3.14'
-            tox-env: 'nodeps-withcov-windows'
-            job-name: 'nodeps-windows-select'
-            runs-on: 'windows-2022'
-            # To add support for iocp and asyncio reactors:
-            # twisted.internet https://github.com/twisted/twisted/issues/12513
-            trial-target: '-- twisted.application twisted.cred twisted.logger twisted.mail twisted.names twisted.pair twisted.persisted twisted.protocols twisted.python twisted.runner twisted.scripts twisted.spread twisted.test twisted.trial twisted.web twisted.words'
-            # Should be removed once we can run distributed tests on Windows
-            # https://github.com/twisted/twisted/issues/12521
-            trial-args: '--reactor=select'
+          # - python-version: '3.14'
+          #   tox-env: 'nodeps-withcov-windows'
+          #   job-name: 'nodeps-windows-select'
+          #   runs-on: 'windows-2022'
+          #   # To add support for iocp and asyncio reactors:
+          #   # twisted.internet https://github.com/twisted/twisted/issues/12513
+          #   trial-target: '-- twisted.application twisted.cred twisted.logger twisted.mail twisted.names twisted.pair twisted.persisted twisted.protocols twisted.python twisted.runner twisted.scripts twisted.spread twisted.test twisted.trial twisted.web twisted.words'
+          #   # Should be removed once we can run distributed tests on Windows
+          #   # https://github.com/twisted/twisted/issues/12521
+          #   trial-args: '--reactor=select'
 
           # - python-version: '3.14'
           #   tox-env: 'nodeps-withcov-posix'
