@@ -11,21 +11,10 @@ import gireactor or gtk3reactor for GObject Introspection based applications,
 or glib2reactor or gtk2reactor for applications using legacy static bindings.
 """
 
-import os
+import select as _select
 import sys
 import time
 from typing import Any, Callable, Dict, Set
-
-_GLIB_DEBUG = os.environ.get("TWISTED_GLIB_DEBUG", "0") == "1"
-
-
-def _gdb(*args):
-    """Debug print for GLib reactor internals."""
-    if _GLIB_DEBUG:
-        msg = " ".join(str(a) for a in args)
-        sys.stderr.write(f"[glibbase {time.monotonic():.3f}] {msg}\n")
-        sys.stderr.flush()
-
 
 from zope.interface import implementer
 
@@ -173,16 +162,14 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         self._timeout_add = self._glib.timeout_add
 
         if platform.isWindows():
-            # GLib's giowin32.c loses track of socket events after rapid
-            # source_remove/io_add_watch cycles. Install a recurring timer
-            # as a safety net.  It only dispatches events when GLib has
-            # not delivered any IO events for at least 1 second, to avoid
-            # interfering with normal event ordering.
+            # GLib's giowin32.c can permanently lose track of socket events
+            # after rapid source_remove/io_add_watch cycles, causing the main
+            # loop to freeze indefinitely.  Install a recurring GLib timer as
+            # a safety net: when no IO events have been delivered for 200ms,
+            # it uses select() to find ready fds and dispatches them directly.
+            # See https://github.com/twisted/twisted/issues/11987
             self._lastIOEvent = time.monotonic()
-            self._timeout_add(
-                200,  # ms
-                self._glibWindowsPoll,
-            )
+            self._timeout_add(200, self._glibWindowsPoll)
 
         self.context = self._glib.main_context_default()
         self._pending = self.context.pending
@@ -252,11 +239,8 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         """
         Called by event loop when an I/O event occurs.
         """
-        self._lastIOEvent = time.monotonic()
-        _gdb(
-            f"_ioEventCallback fd={source.fileno()} condition={int(condition)}"
-            f" inReads={source in self._reads} inWrites={source in self._writes}"
-        )
+        if platform.isWindows():
+            self._lastIOEvent = time.monotonic()
         log.callWithLogger(source, self._doReadOrWrite, source, source, condition)
         return True  # True = don't auto-remove the source
 
@@ -271,13 +255,8 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             return
         flags = primaryFlag
         if source in other:
-            _gdb(
-                f"_add REREGISTER fd={source.fileno()} newFlags={int(flags | otherFlag)}"
-            )
             self._source_remove(self._sources[source])
             flags |= otherFlag
-        else:
-            _gdb(f"_add NEW fd={source.fileno()} flags={int(flags)}")
         self._sources[source] = self.input_add(source, flags, self._ioEventCallback)
         primary.add(source)
 
@@ -286,40 +265,38 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Add a L{FileDescriptor} for monitoring of data available to read.
         """
         self._add(reader, self._reads, self._writes, self.INFLAGS, self.OUTFLAGS)
-        if platform.isWindows() and hasattr(self, "_timeout_add"):
-            self.callLater(0, self._tryReadOrDisconnect, reader)
-
-    def _tryReadOrDisconnect(self, reader):
-        """
-        Attempt to read from a reader or detect disconnection.  Workaround for
-        GLib on Windows not delivering IN/HUP events reliably.
-        """
-        _gdb(
-            f"_tryReadOrDisconnect fd={reader.fileno()} inReads={reader in self._reads}"
-        )
-        if reader in self._reads:
-            self._doReadOrWrite(reader, reader, self._POLL_IN)
 
     def addWriter(self, writer):
         """
         Add a L{FileDescriptor} for monitoring ability to write data.
         """
         self._add(writer, self._writes, self._reads, self.OUTFLAGS, self.INFLAGS)
-        if platform.isWindows():
+        if platform.isWindows() and hasattr(self, "_timeout_add"):
+            # GLib's giowin32.c may fail to deliver the initial OUT event
+            # after re-registration, leaving buffered data unsent.  Schedule
+            # an immediate write attempt via the timer path which is reliable.
             self.callLater(0, self._tryFlushWriter, writer)
+
+    def _tryFlushWriter(self, writer):
+        """
+        Attempt to flush a writer's pending data.  This is a workaround for
+        GLib on Windows not delivering OUT events reliably after rapid
+        source_remove/io_add_watch re-registration cycles.
+        """
+        if writer in self._writes and getattr(writer, "connected", True):
+            self._doReadOrWrite(writer, writer, self._POLL_OUT)
 
     def _glibWindowsPoll(self):
         """
-        Recurring safety-net timer for Windows.  Only dispatches events
-        when GLib has not delivered any IO callbacks for at least 1 second,
-        indicating its giowin32 event machinery has stalled.  Uses
-        select() to find which fds actually have pending data before
-        dispatching, to avoid unnecessary syscalls.
-        """
-        import select as _select
+        Recurring safety-net timer for Windows.  Only dispatches events when
+        GLib has not delivered any IO callbacks for at least 200ms, indicating
+        its event machinery has stalled.  Uses C{select()} to find which fds
+        actually have pending data before dispatching, to avoid unnecessary
+        system calls.
 
+        @return: C{True} to keep the timer recurring.
+        """
         # Don't interfere while GLib is delivering events normally.
-        # Only kick in after 200ms of silence.
         if time.monotonic() - self._lastIOEvent < 0.2:
             return True
 
@@ -346,12 +323,6 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         except Exception:
             return True
 
-        if readable or writable:
-            _gdb(
-                f"_glibWindowsPoll STALL RECOVERY readable={readable}"
-                f" writable={writable}"
-            )
-
         for fd in readable:
             reader = fd_to_reader.get(fd)
             if reader and reader in self._reads:
@@ -360,19 +331,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             writer = fd_to_writer.get(fd)
             if writer and writer in self._writes:
                 self._doReadOrWrite(writer, writer, self._POLL_OUT)
-        return True  # keep timer alive
-
-    def _tryFlushWriter(self, writer):
-        """
-        Attempt to flush a writer's pending data.  This is a workaround for
-        GLib on Windows not delivering OUT events reliably.
-        """
-        _gdb(
-            f"_tryFlushWriter fd={writer.fileno()} inWrites={writer in self._writes}"
-            f" connected={getattr(writer, 'connected', '?')}"
-        )
-        if writer in self._writes and getattr(writer, "connected", True):
-            self._doReadOrWrite(writer, writer, self._POLL_OUT)
+        return True
 
     def getReaders(self):
         """
