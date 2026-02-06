@@ -184,10 +184,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
     def _startWatchdogThread(self):
         """
-        Start a background thread that periodically wakes up the GLib
-        main context.  On Windows, GLib's giowin32.c can lose track of
-        socket events after rapid add/remove cycles (WSAEventSelect
-        state corruption).  Waking the context forces it to re-poll.
+        Start a background thread that monitors for stalls.
         """
         import threading
 
@@ -195,12 +192,28 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
 
         def _watchdog():
             _gdb("WATCHDOG thread started")
+            tick = 0
             while True:
-                time.sleep(0.5)
+                time.sleep(1.0)
+                tick += 1
                 try:
-                    if len(reactor._sources) > 1:
-                        reactor.context.wakeup()
-                        _gdb("WATCHDOG wakeup")
+                    # Check write-pending sources for unsent data
+                    for source in list(reactor._writes):
+                        try:
+                            fd = source.fileno()
+                            tmp = getattr(source, "_tempDataBuffer", [])
+                            tmp_len = getattr(source, "_tempDataLen", 0)
+                            buf = getattr(source, "dataBuffer", b"")
+                            offset = getattr(source, "offset", 0)
+                            buf_pending = len(buf) - offset if buf else 0
+                            _gdb(
+                                f"WATCHDOG tick={tick} fd={fd}"
+                                f" tempBuf={tmp_len}({len(tmp)} chunks)"
+                                f" dataBuf={buf_pending}"
+                                f" type={type(source).__name__}"
+                            )
+                        except Exception as e:
+                            _gdb(f"WATCHDOG probe error: {e}")
                 except Exception as e:
                     _gdb(f"WATCHDOG error: {e}")
 
