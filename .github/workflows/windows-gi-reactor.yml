@@ -16,7 +16,7 @@ env:
 
 on:
   push:
-    branches: [trunk, "11987-*"]
+    branches: [trunk]
   pull_request:
     branches: [trunk]
   workflow_dispatch:
@@ -45,7 +45,7 @@ jobs:
         run: |
           gh release download 2025.9.0 \
             --repo wingtk/gvsbuild \
-            --pattern 'GTK3*.zip' \
+            --pattern 'GTK3_Gvsbuild_*.zip' \
             --output gtk.zip
           7z x gtk.zip -o$GTK_ROOT
 
