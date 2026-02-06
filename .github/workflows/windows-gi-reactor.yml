@@ -51,7 +51,6 @@ jobs:
           echo "C:\\gtk\\lib" >> $GITHUB_PATH
           echo "LIB=C:\\gtk\\lib;$LIB" >> $GITHUB_ENV
           echo "INCLUDE=C:\\gtk\\include;$INCLUDE" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=C:\\gtk\\lib\\pkgconfig" >> $GITHUB_ENV
           echo "UV_FIND_LINKS=C:\\gtk\\wheels" >> $GITHUB_ENV
           printf 'pycairo==1.28.0\npygobject==3.54.0\n' > C:/gtk/constraints.txt
           echo "UV_CONSTRAINT=C:\\gtk\\constraints.txt" >> $GITHUB_ENV
@@ -108,8 +107,6 @@ jobs:
 
       - name: Run TLS test with debug logging
         timeout-minutes: 3
-        env:
-          TWISTED_GLIB_DEBUG: "1"
         run: >
           python -m twisted.trial --reactor=gi
-          twisted.internet.test.test_newtls.ProducerTestsMixin_PortableGIReactorTests
+          twisted.internet.test.test_newtls
