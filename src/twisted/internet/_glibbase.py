@@ -268,7 +268,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Attempt to flush a writer's pending data.  This is a workaround for
         GLib on Windows not delivering OUT events reliably.
         """
-        if writer in self._writes:
+        if writer in self._writes and getattr(writer, "connected", True):
             self._doReadOrWrite(writer, writer, self._POLL_OUT)
 
     def getReaders(self):
