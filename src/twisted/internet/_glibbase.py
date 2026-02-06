@@ -215,6 +215,12 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             # PyGObject does this for socket objects, but we have an int fd.
             # https://github.com/GNOME/pygobject/blob/main/gi/overrides/GLib.py
             fileno = self._glib.IOChannel.win32_new_socket(fileno)
+            # IOChannels default to UTF-8 encoding and buffered mode.  For raw
+            # socket I/O we need binary (no encoding) mode, otherwise GLib may
+            # fail to deliver events when it encounters non-UTF-8 bytes (e.g.
+            # during TLS handshakes).
+            fileno.set_encoding(None)
+            fileno.set_buffered(False)
 
         return self._glib.io_add_watch(
             fileno,
