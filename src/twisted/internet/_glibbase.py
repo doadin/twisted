@@ -218,33 +218,41 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
                         except Exception as e:
                             _gdb(f"WATCHDOG select error: {e}")
 
-                    # Try non-blocking recv(MSG_PEEK) to check for data
-                    peek_results = {}
+                    # Probe each fd for connection state and data
+                    probe = {}
                     for fd in fds:
                         try:
-                            # Use dup so we don't affect the original fd
                             dfd = _socket.dup(fd)
                             s = _socket.socket(fileno=dfd)
                             s.setblocking(False)
                             try:
-                                data = s.recv(1, _socket.MSG_PEEK)
-                                peek_results[fd] = len(data)
-                            except BlockingIOError:
-                                peek_results[fd] = 0
+                                peer = s.getpeername()
                             except OSError as e:
-                                peek_results[fd] = f"err:{e.errno}"
-                            finally:
-                                s.close()  # closes the duped fd
+                                peer = f"e{e.errno}"
+                            try:
+                                err = s.getsockopt(_socket.SOL_SOCKET, _socket.SO_ERROR)
+                            except OSError:
+                                err = "?"
+                            try:
+                                data = s.recv(1, _socket.MSG_PEEK)
+                                has_data = len(data)
+                            except BlockingIOError:
+                                has_data = 0
+                            except OSError as e:
+                                has_data = f"e{e.errno}"
+                            probe[fd] = f"peer={peer} err={err} data={has_data}"
+                            s.close()
                         except Exception as e:
-                            peek_results[fd] = f"dup_err:{e}"
+                            probe[fd] = f"fail:{e}"
 
                     _gdb(
                         f"WATCHDOG tick={tick}"
                         f" reads={fds}"
                         f" readable={readable}"
-                        f" peek={peek_results}"
                         f" sources={[s.fileno() for s in reactor._sources]}"
                     )
+                    for fd, info in probe.items():
+                        _gdb(f"  fd={fd} {info}")
                 except Exception as e:
                     _gdb(f"WATCHDOG error: {e}")
 
