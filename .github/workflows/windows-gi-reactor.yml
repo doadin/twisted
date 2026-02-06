@@ -74,23 +74,7 @@ jobs:
           print('GLib available')
           "
 
-      - name: Smoke test - import and install
-        timeout-minutes: 2
-        run: |
-          python -c "
-          try:
-              from twisted.internet import gireactor
-              reactor = gireactor.install()
-              print(f'Reactor installed: {type(reactor).__name__}')
-          except NameError as e:
-              print(f'EXPECTED FAILURE (Layer 1): {e}')
-              raise SystemExit(1)
-          except Exception as e:
-              print(f'UNEXPECTED ERROR: {type(e).__name__}: {e}')
-              raise SystemExit(1)
-          "
-
-      - name: Smoke test - callLater timing
+      - name: Smoke test
         timeout-minutes: 2
         run: |
           python -c "
@@ -117,8 +101,8 @@ jobs:
 
       - name: Run test for reactor gi
         timeout-minutes: 3
-        run: |
-          python -m twisted.trial --reactor=gi \
+        run: >
+          python -m twisted.trial --reactor=gi
             twisted.internet.test.test_gireactor
             twisted.internet.test.test_glibbase
             twisted.internet.test.test_time
