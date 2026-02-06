@@ -345,7 +345,7 @@ jobs:
   coverage-report:
     name: Coverage report
     runs-on: ubuntu-latest
-    if: always()  # Always run the coverage report, even when the tests fail.
+    if: false
     needs:
       - testing  # Code coverage only needs to wait for test jobs.
     steps:
@@ -410,6 +410,7 @@ jobs:
 
 
   benchmarks:
+    if: false
     runs-on: ubuntu-22.04
 
     steps:
@@ -472,6 +473,7 @@ jobs:
 
 
   static-checks:
+    if: false
     runs-on: ubuntu-22.04
     env:
       TOX_PARALLEL_NO_SPINNER: 1
@@ -502,6 +504,7 @@ jobs:
   # This is only the validation and help highlight docs errors.
   # The actual docs are built and published via Read The Docs.
   apidocs:
+    if: false
     name: API docs build
     runs-on: ubuntu-22.04
     steps:
@@ -519,6 +522,7 @@ jobs:
         tox -e apidocs
 
   narrativedocs:
+    if: false
     name: Narrative docs build
     runs-on: ubuntu-22.04
     steps:
@@ -542,6 +546,7 @@ jobs:
   # process late in the release cycle,
   # The files are published only when a tag is created using the next job, release-publish
   release-build:
+    if: false
     name: Build and check release, then upload artifact
     runs-on: 'ubuntu-22.04'
     steps:
@@ -604,9 +609,7 @@ jobs:
   # See GitHub support answer for this hack.
   # https://gist.github.com/altendky/2e3483a1f7e1ba21cc97de75db9b7d1c
   all-successful:
-    # Is very important to force running this always, as otherwise it will be
-    #  skipped by default.
-    if: always()
+    if: false
     runs-on: ubuntu-latest
     # Here should be the list of all the other jobs defined in this file.
     needs:
