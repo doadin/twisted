@@ -1,0 +1,106 @@
+# .github/workflows/windows-gi-reactor.yml
+#
+# CI to test the GI/GTK reactor fix on Windows.
+# Uses MSYS2 (pre-installed on windows-latest) for GTK3 + PyGObject.
+#
+# References:
+#   - https://github.com/twisted/twisted/issues/11987
+#   - https://github.com/msys2/setup-msys2
+
+name: Windows GI Reactor Tests
+
+on:
+  push:
+    branches: [ trunk, "11987-*" ]
+  pull_request:
+    branches: [ trunk ]
+  workflow_dispatch:
+
+jobs:
+  windows-gi-test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # MSYS2 UCRT64 environment — the recommended modern toolchain
+        include:
+          - msystem: UCRT64
+            prefix: mingw-w64-ucrt-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2 with GTK3 and PyGObject
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: >-
+            ${{ matrix.prefix }}-python3
+            ${{ matrix.prefix }}-python3-gobject
+            ${{ matrix.prefix }}-python3-pip
+            ${{ matrix.prefix }}-gtk3
+
+      - name: Install Twisted from source
+        shell: msys2 {0}
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Verify GTK3 and gi are available
+        shell: msys2 {0}
+        run: |
+          python -c "
+          import sys
+          print(f'Python {sys.version}')
+          print(f'Platform: {sys.platform}')
+          import gi
+          print(f'gi version: {gi.__version__}')
+          gi.require_version('GLib', '2.0')
+          from gi.repository import GLib
+          print('GLib available')
+          "
+
+      # Quick smoke test — validates the core fix works
+      - name: Smoke test - import, install, run, stop
+        shell: msys2 {0}
+        run: |
+          python -c "
+          import sys
+          print(f'Python {sys.version}')
+          print(f'Platform: {sys.platform}')
+
+          # Test 1: Import
+          from twisted.internet import gireactor
+          print('PASS: gireactor imported')
+
+          # Test 2: Install
+          reactor = gireactor.install()
+          print(f'PASS: reactor installed: {type(reactor).__name__}')
+
+          # Test 3: Waker is functional
+          print(f'PASS: waker type: {type(reactor.waker).__name__}')
+          print(f'PASS: waker fileno: {reactor.waker.fileno()}')
+
+          # Test 4: Run/stop cycle
+          results = []
+          def cb():
+              results.append('called')
+              reactor.stop()
+          reactor.callWhenRunning(cb)
+          reactor.run(installSignalHandlers=False)
+          assert results == ['called'], f'Expected [called], got {results}'
+          print('PASS: run/stop cycle works')
+
+          print('ALL SMOKE TESTS PASSED')
+          "
+
+      # Full GI reactor test suite
+      - name: Run test_gireactor
+        shell: msys2 {0}
+        run: |
+          python -m twisted.trial twisted.internet.test.test_gireactor
+
+      - name: Run test_glibbase
+        shell: msys2 {0}
+        run: |
+          python -m twisted.trial twisted.internet.test.test_glibbase
