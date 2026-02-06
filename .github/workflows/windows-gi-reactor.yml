@@ -43,11 +43,14 @@ jobs:
       - name: Install GTK via gvsbuild
         shell: bash
         run: |
-          gh release download 2025.9.0 \
+          gh release download $GVSBUILD_VERSION \
             --repo wingtk/gvsbuild \
             --pattern 'GTK3_Gvsbuild_*.zip' \
             --output gtk.zip
           7z x gtk.zip -o$GTK_ROOT
+        env:
+          # See https://github.com/wingtk/gvsbuild/releases
+          GVSBUILD_VERSION: 2025.9.0  # Python 3.13, pycairo 1.28.0, pygobject 3.54.0
 
       - name: Set GTK environment
         shell: bash
