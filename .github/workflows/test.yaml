@@ -290,22 +290,28 @@ jobs:
     - name: Install GTK on Windows
       if: matrix.platform-deps == 'gtk-platform-windows'
       run: |
-        # Download pre-built GTK from gvsbuild for Python 3.13
-        gh release download 2025.9.0 --repo wingtk/gvsbuild --pattern 'GTK3*.zip' -O gtk.zip
-        7z x gtk.zip -oC:\gtk
-        echo "C:\gtk\bin" >> $GITHUB_PATH
-        echo "C:\gtk\lib" >> $GITHUB_PATH
-        # Set required environment variables for PyGObject and PyCairo
-        echo "LIB=C:\gtk\lib;$LIB" >> $GITHUB_ENV
-        echo "INCLUDE=C:\gtk\include;$INCLUDE" >> $GITHUB_ENV
-        echo "PKG_CONFIG_PATH=C:\gtk\lib\pkgconfig" >> $GITHUB_ENV
+        gh release download $GVSBUILD_VERSION \
+          --repo wingtk/gvsbuild \
+          --pattern 'GTK3_Gvsbuild_*.zip' \
+          --output gtk.zip
+        7z x gtk.zip -o$GTK_ROOT
+
+        # Add GTK to PATH for PyGObject
+        echo "$GTK_ROOT/bin" >> $GITHUB_PATH
+        echo "$GTK_ROOT/lib" >> $GITHUB_PATH
+        echo "LIB=$GTK_ROOT/lib" >> $GITHUB_ENV
+        echo "INCLUDE=$GTK_ROOT/include" >> $GITHUB_ENV
+
         # Make wheels available to tox's pip via PIP_FIND_LINKS
         # Pin versions to match the gvsbuild wheels so pip doesn't pull newer ones from PyPI
-        echo "PIP_FIND_LINKS=C:\\gtk\\wheels" >> $GITHUB_ENV
-        printf 'pycairo==1.28.0\npygobject==3.54.0\n' > C:/gtk/constraints.txt
-        echo "PIP_CONSTRAINT=C:\\gtk\\constraints.txt" >> $GITHUB_ENV
+        echo "PIP_FIND_LINKS=$GTK_ROOT/wheels" >> $GITHUB_ENV
+        printf 'pycairo==1.28.0\npygobject==3.54.0\n' > $GTK_ROOT/constraints.txt
+        echo "PIP_CONSTRAINT=$GTK_ROOT/constraints.txt" >> $GITHUB_ENV
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ github.token }}  # for github cli
+        GTK_ROOT: C:\gtk
+        # See https://github.com/wingtk/gvsbuild/releases
+        GVSBUILD_VERSION: 2025.9.0  # Python 3.13, pycairo 1.28.0, pygobject 3.54.0
 
     - name: Test
       run: |
