@@ -251,7 +251,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Add a L{FileDescriptor} for monitoring of data available to read.
         """
         self._add(reader, self._reads, self._writes, self.INFLAGS, self.OUTFLAGS)
-        if platform.isWindows():
+        if platform.isWindows() and hasattr(self, "_timeout_add"):
             self.callLater(0, self._tryReadOrDisconnect, reader)
 
     def _tryReadOrDisconnect(self, reader):
@@ -259,7 +259,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Attempt to read from a reader or detect disconnection.  Workaround for
         GLib on Windows not delivering IN/HUP events reliably.
         """
-        if reader in self._reads and getattr(reader, "connected", True):
+        if reader in self._reads:
             self._doReadOrWrite(reader, reader, self._POLL_IN)
 
     def addWriter(self, writer):
