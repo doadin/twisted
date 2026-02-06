@@ -333,6 +333,19 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         Add a L{FileDescriptor} for monitoring ability to write data.
         """
         self._add(writer, self._writes, self._reads, self.OUTFLAGS, self.INFLAGS)
+        if platform.isWindows():
+            # GLib on Windows (giowin32.c) can fail to deliver OUT events
+            # after rapid source_remove/io_add_watch cycles.  Schedule an
+            # immediate write attempt via the timer path which is reliable.
+            self.callLater(0, self._tryFlushWriter, writer)
+
+    def _tryFlushWriter(self, writer):
+        """
+        Attempt to flush a writer's pending data.  This is a workaround for
+        GLib on Windows not delivering OUT events reliably.
+        """
+        if writer in self._writes:
+            self._doReadOrWrite(writer, writer, self._POLL_OUT)
 
     def getReaders(self):
         """
