@@ -118,6 +118,6 @@ jobs:
         timeout-minutes: 3
         run: >
           python -m twisted.trial --reactor=gi
-          -k GIReactor
+          --testmodule GIReactor
           twisted.internet.test.test_newtls
           twisted.internet.test.test_tcp
