@@ -287,50 +287,73 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             self._doReadOrWrite(writer, writer, self._POLL_OUT)
 
     def _glibWindowsPoll(self):
-        """
-        Recurring safety-net timer for Windows.  Only dispatches events when
-        GLib has not delivered any IO callbacks for at least 200ms, indicating
-        its event machinery has stalled.  Uses C{select()} to find which fds
-        actually have pending data before dispatching, to avoid unnecessary
-        system calls.
-
-        @return: C{True} to keep the timer recurring.
-        """
-        # Don't interfere while GLib is delivering events normally.
-        if time.monotonic() - self._lastIOEvent < 0.2:
+        now = time.monotonic()
+    
+        if now - self._lastIOEvent < 0.15:
             return True
-
+    
         fd_to_reader = {}
         fd_to_writer = {}
+    
         for r in list(self._reads):
             try:
                 fd_to_reader[r.fileno()] = r
             except Exception:
                 pass
+    
         for w in list(self._writes):
             try:
                 fd_to_writer[w.fileno()] = w
             except Exception:
                 pass
-
+    
         rfds = list(fd_to_reader.keys())
         wfds = list(fd_to_writer.keys())
+    
         if not rfds and not wfds:
             return True
-
+    
         try:
             readable, writable, _ = _select.select(rfds, wfds, [], 0)
         except Exception:
             return True
-
+    
+        if now - self._lastIOEvent < 0.15:
+            return True
+    
+        MAX_EVENTS = 8
+        dispatched = 0
+    
         for fd in readable:
+            if dispatched >= MAX_EVENTS:
+                break
+    
             reader = fd_to_reader.get(fd)
-            if reader and reader in self._reads:
+            if not reader or reader not in self._reads:
+                continue
+    
+            if getattr(reader, "_aborting", False):
+                self._doReadOrWrite(reader, reader, self._POLL_DISCONNECTED)
+            else:
                 self._doReadOrWrite(reader, reader, self._POLL_IN)
+    
+            dispatched += 1
+    
         for fd in writable:
+            if dispatched >= MAX_EVENTS:
+                break
+    
             writer = fd_to_writer.get(fd)
-            if writer and writer in self._writes:
+            if not writer or writer not in self._writes:
+                continue
+    
+            if getattr(writer, "buffer", None) or getattr(writer, "producer", None):
                 self._doReadOrWrite(writer, writer, self._POLL_OUT)
+                dispatched += 1
+    
+        if dispatched:
+            self._lastIOEvent = time.monotonic()
+    
         return True
 
     def getReaders(self):
