@@ -287,11 +287,27 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             self._doReadOrWrite(writer, writer, self._POLL_OUT)
 
     def _glibWindowsPoll(self):
+        """
+        Windows fallback poller for GLib reactors.
+    
+        Workaround for GLib issues #214 and #40 where g_poll() on Windows
+        stalls after timeouts or fails to deliver I/O readiness notifications.
+    
+        This fallback:
+          • Only activates after ~150ms of GLib inactivity
+          • Dispatches only events that were pending at the moment of stall
+          • Preserves Twisted abort semantics
+          • Avoids early writable dispatch (prevents premature EOF)
+          • Limits batch size to mimic GLib behavior
+          • Updates last-IO timestamp to avoid repeated fallback cycles
+        """
         now = time.monotonic()
     
+        # 1) GLib is still delivering events normally — do nothing.
         if now - self._lastIOEvent < 0.15:
             return True
     
+        # 2) Snapshot Twisted's read/write FD sets.
         fd_to_reader = {}
         fd_to_writer = {}
     
@@ -313,17 +329,21 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
         if not rfds and not wfds:
             return True
     
+        # 3) Non-blocking select to detect pending events.
         try:
             readable, writable, _ = _select.select(rfds, wfds, [], 0)
         except Exception:
             return True
     
+        # 4) Re-check stall window: if GLib delivered something while we selected,
+        #    don't steal events it would have handled.
         if now - self._lastIOEvent < 0.15:
             return True
     
         MAX_EVENTS = 8
         dispatched = 0
     
+        # ---- READABLE ----
         for fd in readable:
             if dispatched >= MAX_EVENTS:
                 break
@@ -332,6 +352,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             if not reader or reader not in self._reads:
                 continue
     
+            # 5) Preserve abort semantics: if aborting, treat as disconnected.
             if getattr(reader, "_aborting", False):
                 self._doReadOrWrite(reader, reader, self._POLL_DISCONNECTED)
             else:
@@ -339,6 +360,7 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
     
             dispatched += 1
     
+        # ---- WRITABLE ----
         for fd in writable:
             if dispatched >= MAX_EVENTS:
                 break
@@ -347,10 +369,12 @@ class GlibReactorBase(posixbase.PosixReactorBase, posixbase._PollLikeMixin):
             if not writer or writer not in self._writes:
                 continue
     
+            # 6) Only dispatch writable if there's buffered output.
             if getattr(writer, "buffer", None) or getattr(writer, "producer", None):
                 self._doReadOrWrite(writer, writer, self._POLL_OUT)
                 dispatched += 1
     
+        # 7) If we dispatched anything, treat it as I/O activity.
         if dispatched:
             self._lastIOEvent = time.monotonic()
     
